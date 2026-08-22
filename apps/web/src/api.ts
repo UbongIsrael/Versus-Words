@@ -43,6 +43,7 @@ export type MatchView = {
     address: string
     funded: boolean
     scored: boolean
+    playing: boolean
     words: string[] | null
     uniqueScore: number | null
     evmAddress?: string | null
@@ -51,6 +52,7 @@ export type MatchView = {
     address: string
     funded: boolean
     scored: boolean
+    playing: boolean
     wordCount: number
     uniqueScore: number | null
     evmAddress?: string | null
@@ -59,6 +61,7 @@ export type MatchView = {
     address: string
     funded: boolean
     scored: boolean
+    playing: boolean
     wordCount: number
     uniqueScore: number | null
     evmAddress?: string | null

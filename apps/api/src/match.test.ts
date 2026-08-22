@@ -10,6 +10,7 @@ import {
   leaveMatch,
   liveRematchOffer,
   memoBelongsTo,
+  publicMatch,
   rematchFrom,
   requestRematch,
   sweepMatch,
@@ -118,6 +119,19 @@ describe('versus match', () => {
     expect(() => applyFund(match, { ...fundTx(ALICE, match.id), hash: 'other-tx' }, ESCROW)).toThrow(
       'already-funded',
     )
+  })
+
+  it('marks a live run as playing in the public view', () => {
+    const match = createMatch(ALICE, 1)
+    joinMatch(match, BOB)
+    applyFund(match, fundTx(ALICE, match.id), ESCROW)
+    applyFund(match, fundTx(BOB, match.id), ESCROW)
+    match.challenger.runId = 'run-1'
+    match.challenger.runStartedAt = Date.now()
+    const view = publicMatch(match, ALICE)
+    expect(view.you?.playing).toBe(true)
+    expect(view.challenger.playing).toBe(true)
+    expect(view.opponent?.playing).toBe(false)
   })
 
   it('opens a rematch with a new seed, empty funds, and the same room code', () => {

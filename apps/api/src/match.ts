@@ -484,6 +484,7 @@ export function publicMatch(match: Match, viewer?: string | null) {
           address: you.address,
           funded: you.funded,
           scored: Boolean(you.words),
+          playing: seatPlaying(you),
           words: you.words ?? null,
           uniqueScore: you.uniqueScore ?? null,
           evmAddress: you.evmAddress ?? null,
@@ -517,10 +518,15 @@ function publicSeat(seat: Seat) {
     address: seat.address,
     funded: seat.funded,
     scored: Boolean(seat.words),
+    playing: seatPlaying(seat),
     wordCount: seat.words?.length ?? 0,
     uniqueScore: seat.uniqueScore ?? null,
     evmAddress: seat.evmAddress ?? null,
   }
+}
+
+export function seatPlaying(seat: Seat, now = Date.now()): boolean {
+  return Boolean(seat.runId && !seat.words && seat.runStartedAt && now - seat.runStartedAt < RUN_MS)
 }
 
 function stakeOf(match: Match): number {
