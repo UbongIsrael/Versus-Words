@@ -1,0 +1,11 @@
+node_modules
+dist
+.DS_Store
+*.log
+.env
+.env.local
+.wrangler
+data/matches.json
+contracts/cache
+contracts/artifacts
+contracts/typechain-types
