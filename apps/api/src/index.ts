@@ -58,8 +58,9 @@ app.use(
   }),
 )
 
+let matchStoreKind = 'pending'
 app.get('/health', (c) =>
-  c.json({ ok: true, words: dict.size, date: utcDate() }),
+  c.json({ ok: true, words: dict.size, date: utcDate(), matches: matchStoreKind }),
 )
 
 app.get('/dictionary.txt', (c) => {
@@ -151,12 +152,13 @@ app.get('/api/leaderboard', (c) => {
   })
 })
 
-const matchApi = attachMatchRoutes(app, playerIdFrom, {
+const matchApi = await attachMatchRoutes(app, playerIdFrom, {
   secret: SECRET,
   store,
   dict,
   dataDir: DATA_DIR,
 })
+matchStoreKind = matchApi.storeKind
 
 app.post('/api/runs', async (c) => {
   const playerId = playerIdFrom(c)
@@ -241,5 +243,16 @@ app.post('/api/runs/:id/submit', async (c) => {
 })
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
-  console.log(`versus-word api on http://localhost:${info.port} (${dict.size} words)`)
+  console.log(`versus-word api on http://localhost:${info.port} (${dict.size} words, ${matchStoreKind})`)
 })
+
+async function flushAndExit() {
+  try {
+    await matchApi.persistNow()
+  } catch (err) {
+    console.warn('match flush failed', err)
+  }
+  process.exit(0)
+}
+process.on('SIGTERM', flushAndExit)
+process.on('SIGINT', flushAndExit)

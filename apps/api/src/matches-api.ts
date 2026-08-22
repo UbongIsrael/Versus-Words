@@ -1,4 +1,3 @@
-import { resolve } from 'node:path'
 import type { Hono } from 'hono'
 import type { InputEvent } from '@versus/sim'
 import { ESCROW_ADDRESS, escrowConfigured, fakeChain, fetchIncoming, fetchTx } from './chain.ts'
@@ -20,7 +19,7 @@ import {
   type Match,
 } from './match.ts'
 import { isGuestId, normalizeWalletAddress } from './nimiq.ts'
-import { loadMatches, saveMatches } from './persist.ts'
+import { createMatchStore } from './persist.ts'
 import type { Store } from './store.ts'
 import { oracleAddress, playerDeposited, readPot, signSettle, winnerCode, USDT_ESCROW, USDT_TOKEN, POLYGON_CHAIN_ID, usdtEscrowConfigured } from './polygon.ts'
 import { newId, signRun } from './token.ts'
@@ -29,18 +28,37 @@ type PlayerFn = (c: { req: { header: (n: string) => string | undefined; query: (
   | string
   | null
 
-export function attachMatchRoutes(
+export async function attachMatchRoutes(
   app: Hono,
   playerIdFrom: PlayerFn,
   opts: { secret: string; store: Store; dict: Set<string>; dataDir: string },
 ) {
-  const persistPath = resolve(opts.dataDir, 'matches.json')
+  const matchStore = createMatchStore({ dataDir: opts.dataDir })
   const matches = new Map<string, Match>()
-  for (const match of loadMatches(persistPath)) matches.set(match.id, match)
+  for (const match of await matchStore.load()) matches.set(match.id, match)
   for (const match of matches.values()) sweepMatch(match)
+  console.log(`matches: loaded ${matches.size} from ${matchStore.kind}`)
+
+  let persistTimer: ReturnType<typeof setTimeout> | null = null
+  let writing = Promise.resolve()
 
   function persist() {
-    saveMatches(persistPath, [...matches.values()])
+    if (persistTimer) return
+    persistTimer = setTimeout(() => {
+      persistTimer = null
+      writing = writing
+        .then(() => matchStore.save([...matches.values()]))
+        .catch((err) => console.warn('match persist failed', err))
+    }, 400)
+  }
+
+  async function persistNow() {
+    if (persistTimer) {
+      clearTimeout(persistTimer)
+      persistTimer = null
+    }
+    await writing
+    await matchStore.save([...matches.values()])
   }
 
   function walletOf(c: Parameters<PlayerFn>[0]) {
@@ -375,7 +393,7 @@ export function attachMatchRoutes(
     return publicMatch(match, playerId)
   }
 
-  return { applyVersusSubmit }
+  return { applyVersusSubmit, persistNow, storeKind: matchStore.kind }
 }
 
 function joinMatchSafe(match: Match, wallet: string) {
