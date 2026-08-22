@@ -22,13 +22,19 @@ const SECRET = process.env.RUN_SECRET ?? 'versus-word-dev-secret'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(HERE, '../../..')
 const DICT_PATH = resolve(HERE, process.env.DICT_PATH ?? '../../../data/enable.txt')
-const DATA_DIR = resolve(ROOT, 'data')
+const DATA_DIR = process.env.DATA_DIR ? resolve(process.env.DATA_DIR) : resolve(ROOT, 'data')
+const CORS_ORIGINS = (process.env.CORS_ORIGINS ?? '')
+  .split(',')
+  .map((s) => s.trim().replace(/\/$/, ''))
+  .filter(Boolean)
 
 const dict = parseDictionary(readFileSync(DICT_PATH, 'utf8'))
 const store = createStore()
 const sessions = createSessionStore()
 
 function allowedOrigin(origin: string): boolean {
+  const normalized = origin.replace(/\/$/, '')
+  if (CORS_ORIGINS.includes('*') || CORS_ORIGINS.includes(normalized)) return true
   try {
     const url = new URL(origin)
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return false

@@ -8,12 +8,21 @@ Spec: [docs/versus-word.md](docs/versus-word.md)
 
 ```bash
 npm install
+cp apps/api/.env.example apps/api/.env.local
+cp apps/web/.env.example apps/web/.env.local
 npm test
 npm run dev
 ```
 
 - Web: http://localhost:5173
 - API: http://localhost:8787/health
+
+Env templates: [apps/web/.env.example](apps/web/.env.example) and [apps/api/.env.example](apps/api/.env.example).
+
+Production (split hosts):
+
+- **Frontend (Vercel):** `VITE_API_URL=https://your-api.example.com` (build-time)
+- **API (Railway / Render / Node):** `CORS_ORIGINS=https://your-frontend.vercel.app`, `PORT`, `RUN_SECRET`, plus chain keys as needed
 
 Play in a phone-sized viewport. For Nimiq Pay later: same Wi-Fi, Custom URL → your machine.
 

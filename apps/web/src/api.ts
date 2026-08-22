@@ -2,6 +2,13 @@ import type { InputEvent } from '@versus/sim'
 import { getPlayerId } from './identity.ts'
 import { getSessionToken } from './session.ts'
 
+const API_BASE = String(import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
+
+function apiUrl(path: string): string {
+  if (!API_BASE) return path
+  return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`
+}
+
 export type IssuedRun = {
   runId: string
   seed: string
@@ -98,7 +105,7 @@ async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
   const session = getSessionToken()
   if (session) headers.set('Authorization', `Bearer ${session}`)
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
-  const res = await fetch(path, { ...init, headers })
+  const res = await fetch(apiUrl(path), { ...init, headers })
   const data = (await res.json().catch(() => ({}))) as T & { error?: string }
   if (!res.ok) {
     const err = new Error(data.error ?? `http-${res.status}`)
@@ -153,7 +160,7 @@ export const api = {
 }
 
 export async function loadDictionary(): Promise<string> {
-  const res = await fetch('/dictionary.txt')
+  const res = await fetch(apiUrl('/dictionary.txt'))
   if (!res.ok) throw new Error('dictionary-failed')
   return res.text()
 }

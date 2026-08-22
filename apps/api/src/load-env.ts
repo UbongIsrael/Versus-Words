@@ -2,10 +2,19 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
+const here = dirname(fileURLToPath(import.meta.url))
+const root = resolve(here, '../../..')
+const apiDir = resolve(here, '..')
 
-for (const name of ['.env', '.env.local']) {
-  const path = resolve(root, name)
+const fromHost = new Set(Object.keys(process.env))
+const files = [
+  resolve(root, '.env'),
+  resolve(apiDir, '.env'),
+  resolve(root, '.env.local'),
+  resolve(apiDir, '.env.local'),
+]
+
+for (const path of files) {
   if (!existsSync(path)) continue
   for (const line of readFileSync(path, 'utf8').split('\n')) {
     const trimmed = line.trim()
@@ -17,6 +26,6 @@ for (const name of ['.env', '.env.local']) {
     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
       value = value.slice(1, -1)
     }
-    if (process.env[key] === undefined) process.env[key] = value
+    if (!fromHost.has(key)) process.env[key] = value
   }
 }

@@ -9,7 +9,7 @@ import {
 } from './abi.ts'
 
 export const POLYGON_CHAIN_ID = Number(process.env.POLYGON_CHAIN_ID ?? 137)
-export const USDT_TOKEN = (process.env.USDT_TOKEN ?? '0xc2132d05d31c914a87c6611c10748aeb04b58e8f').toLowerCase()
+export const USDT_TOKEN = (process.env.USDT_TOKEN ?? '').toLowerCase()
 export const USDT_ESCROW = (process.env.USDT_ESCROW ?? '').toLowerCase()
 export const POLYGON_RPC = process.env.POLYGON_RPC ?? 'https://polygon-bor-rpc.publicnode.com'
 const ORACLE_KEY = (process.env.POLYGON_ORACLE_KEY ?? '').replace(/^0x/, '')
