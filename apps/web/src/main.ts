@@ -9,7 +9,7 @@ import {
 } from '@versus/sim'
 import { api, loadDictionary, type DailyInfo, type IssuedRun, type Leaderboard, type MatchView } from './api.ts'
 import { mountGrid, type GridView } from './grid-view.ts'
-import { lockUsdt, submitSettle } from './evm.ts'
+import { evmAccount, lockUsdt, peekEvmAddress, submitSettle } from './evm.ts'
 import { isPayAvailable, listPayAddress, sendStake, signPayMessage } from './pay.ts'
 import { clearSession, getSession, setSession } from './session.ts'
 import './styles/app.css'
@@ -418,7 +418,8 @@ async function showMatch(id: string) {
   stopMatchPoll()
   let match: MatchView
   try {
-    match = await api.getMatch(id)
+    const evm = await peekEvmAddress()
+    match = await api.getMatch(id, evm ?? undefined)
   } catch {
     root.innerHTML = `<p class="kicker">Match not found.</p><button class="btn btn-primary" data-act="home">Home</button>`
     root.querySelector('[data-act="home"]')?.addEventListener('click', () => {
@@ -554,6 +555,16 @@ async function fundSeat(id: string) {
     let evmAddress: string | undefined
     if (!config.fakeChain && match.asset === 'USDT') {
       if (!config.usdt.escrow) throw new Error('usdt-escrow-unconfigured')
+      evmAddress = await evmAccount(config.usdt.chainId)
+      try {
+        const already = await api.fundMatch(id, { evmAddress })
+        if (already.you?.funded) {
+          await showMatch(id)
+          return
+        }
+      } catch (err) {
+        if (!(err instanceof Error && err.message === 'not-seen-on-chain')) throw err
+      }
       const locked = await lockUsdt({
         token: config.usdt.token,
         escrow: config.usdt.escrow,

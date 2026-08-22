@@ -145,7 +145,8 @@ export const api = {
   config: () => req<AppConfig>('/api/config'),
   createMatch: (body: { stakeAmount: number; asset: 'NIM' | 'USDT'; scoreMode: 'unique' | 'count' }) =>
     req<MatchView>('/api/matches', { method: 'POST', body: JSON.stringify(body) }),
-  getMatch: (id: string) => req<MatchView>(`/api/matches/${id}`),
+  getMatch: (id: string, evm?: string) =>
+    req<MatchView>(`/api/matches/${id}${evm ? `?evm=${encodeURIComponent(evm)}` : ''}`),
   getMatchByCode: (code: string) => req<MatchView>(`/api/matches/code/${encodeURIComponent(code)}`),
   joinMatch: (id: string) => req<MatchView>(`/api/matches/${id}/join`, { method: 'POST', body: '{}' }),
   startVersus: (id: string) => req<IssuedRun>(`/api/matches/${id}/run`, { method: 'POST', body: '{}' }),

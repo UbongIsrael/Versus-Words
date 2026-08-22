@@ -10,6 +10,19 @@ function provider(): Ethereum {
   return eth
 }
 
+/** No popup. Empty if the wallet is locked or not connected. */
+export async function peekEvmAddress(): Promise<string | null> {
+  try {
+    const eth = (window as Window & { ethereum?: Ethereum }).ethereum
+    if (!eth) return null
+    const accounts = (await eth.request({ method: 'eth_accounts' })) as string[]
+    const address = accounts[0]
+    return address ? address.toLowerCase() : null
+  } catch {
+    return null
+  }
+}
+
 export async function evmAccount(chainId: number): Promise<string> {
   const eth = provider()
   await ensureChain(eth, chainId)

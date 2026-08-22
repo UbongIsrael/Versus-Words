@@ -65,6 +65,34 @@ export function attachMatchRoutes(
     }
   }
 
+  async function syncUsdtFunds(match: Match, nimiqWallet: string | null, evm?: string) {
+    if ((match.asset ?? 'NIM') !== 'USDT' || fakeChain() || !usdtEscrowConfigured()) return
+    if (isClosed(match) || isSettled(match)) return
+    try {
+      const pot = await readPot(match.id)
+      if (!pot) return
+      const mark = (seat: typeof match.challenger | null, addr: string) => {
+        if (!seat || seat.funded) {
+          if (seat && !seat.evmAddress) seat.evmAddress = addr
+          return
+        }
+        markSeatFunded(match, seat.address, addr, `usdt-sync-${addr}`)
+      }
+      if (match.challenger.evmAddress && playerDeposited(pot, match.challenger.evmAddress)) {
+        mark(match.challenger, match.challenger.evmAddress)
+      }
+      if (match.opponent?.evmAddress && playerDeposited(pot, match.opponent.evmAddress)) {
+        mark(match.opponent, match.opponent.evmAddress)
+      }
+      if (evm && playerDeposited(pot, evm) && nimiqWallet) {
+        const seat = seatOf(match, nimiqWallet)
+        if (seat) mark(seat, evm)
+      }
+    } catch (err) {
+      console.warn('usdt sync failed', err)
+    }
+  }
+
   setInterval(() => {
     const now = Date.now()
     let dirty = false
@@ -146,8 +174,10 @@ export function attachMatchRoutes(
     const match = matches.get(c.req.param('id'))
     if (!match) return c.json({ error: 'unknown-match' }, 404)
     const wallet = walletOf(c)
+    const evm = c.req.query('evm')?.trim().toLowerCase()
     if (wallet) {
       await syncFunds(match)
+      await syncUsdtFunds(match, wallet, evm)
       touchPresence(match, wallet)
     }
     sweepMatch(match)
@@ -213,6 +243,11 @@ export function attachMatchRoutes(
         if (!usdtEscrowConfigured()) return c.json({ error: 'usdt-escrow-unconfigured' }, 503)
         const evm = typeof body.evmAddress === 'string' ? body.evmAddress.toLowerCase() : ''
         if (!/^0x[0-9a-f]{40}$/.test(evm)) return c.json({ error: 'evm-required' }, 400)
+        await syncUsdtFunds(match, wallet, evm)
+        if (seatOf(match, wallet)?.funded) {
+          persist()
+          return c.json(publicMatch(match, wallet))
+        }
         const pot = await readPot(match.id)
         if (!playerDeposited(pot, evm)) return c.json({ error: 'not-seen-on-chain' }, 409)
         markSeatFunded(match, wallet, evm, typeof body.txHash === 'string' ? body.txHash : `usdt-${evm}`)
