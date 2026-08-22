@@ -147,7 +147,10 @@ export const api = {
     req<MatchView>('/api/matches', { method: 'POST', body: JSON.stringify(body) }),
   getMatch: (id: string, evm?: string) =>
     req<MatchView>(`/api/matches/${id}${evm ? `?evm=${encodeURIComponent(evm)}` : ''}`),
-  getMatchByCode: (code: string) => req<MatchView>(`/api/matches/code/${encodeURIComponent(code)}`),
+  getMatchByCode: (code: string, evm?: string) =>
+    req<MatchView>(
+      `/api/matches/code/${encodeURIComponent(code)}${evm ? `?evm=${encodeURIComponent(evm)}` : ''}`,
+    ),
   joinMatch: (id: string) => req<MatchView>(`/api/matches/${id}/join`, { method: 'POST', body: '{}' }),
   startVersus: (id: string) => req<IssuedRun>(`/api/matches/${id}/run`, { method: 'POST', body: '{}' }),
   rematch: (id: string) => req<MatchView>(`/api/matches/${id}/rematch`, { method: 'POST', body: '{}' }),

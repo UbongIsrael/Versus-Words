@@ -9,7 +9,7 @@ import {
 } from '@versus/sim'
 import { api, loadDictionary, type DailyInfo, type IssuedRun, type Leaderboard, type MatchView } from './api.ts'
 import { mountGrid, type GridView } from './grid-view.ts'
-import { evmAccount, lockUsdt, peekEvmAddress, submitSettle } from './evm.ts'
+import { evmAccount, lockUsdt, recallLock, resolveEvmAddress, submitSettle } from './evm.ts'
 import { isPayAvailable, listPayAddress, sendStake, signPayMessage } from './pay.ts'
 import { clearSession, getSession, setSession } from './session.ts'
 import './styles/app.css'
@@ -404,7 +404,8 @@ function showJoinCode() {
 
 async function openByCode(code: string) {
   try {
-    const match = await api.getMatchByCode(code)
+    const evm = await resolveEvmAddress()
+    const match = await api.getMatchByCode(code, evm ?? undefined)
     history.replaceState({}, '', `/?v=${match.id}`)
     await showMatch(match.id)
   } catch {
@@ -418,7 +419,17 @@ async function showMatch(id: string) {
   stopMatchPoll()
   let match: MatchView
   try {
-    const evm = await peekEvmAddress()
+    const config = await api.config().catch(() => null)
+    const recalled = recallLock(id)
+    const evm =
+      recalled?.evm ?? (await resolveEvmAddress(config?.usdt.chainId)) ?? null
+    if (recalled) {
+      try {
+        await api.fundMatch(id, { evmAddress: recalled.evm, txHash: recalled.txHash })
+      } catch {
+        /* still load the match */
+      }
+    }
     match = await api.getMatch(id, evm ?? undefined)
   } catch {
     root.innerHTML = `<p class="kicker">Match not found.</p><button class="btn btn-primary" data-act="home">Home</button>`

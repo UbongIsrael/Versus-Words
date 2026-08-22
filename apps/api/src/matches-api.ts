@@ -88,6 +88,13 @@ export function attachMatchRoutes(
         const seat = seatOf(match, nimiqWallet)
         if (seat) mark(seat, evm)
       }
+      const depositors: string[] = []
+      if (pot.deposits & 1 && pot.playerA) depositors.push(pot.playerA)
+      if (pot.deposits & 2 && pot.playerB) depositors.push(pot.playerB)
+      const unfunded = [match.challenger, match.opponent].filter((s) => s && !s.funded)
+      if (depositors.length === 1 && unfunded.length === 1 && unfunded[0] && nimiqWallet === unfunded[0].address) {
+        mark(unfunded[0], depositors[0]!)
+      }
     } catch (err) {
       console.warn('usdt sync failed', err)
     }
@@ -167,7 +174,11 @@ export function attachMatchRoutes(
     if (!code) return c.json({ error: 'bad-code' }, 400)
     const match = [...matches.values()].find((m) => m.code === code && !isClosed(m) && !m.settledAt)
     if (!match) return c.json({ error: 'unknown-match' }, 404)
-    return c.json(publicMatch(match, walletOf(c)))
+    const wallet = walletOf(c)
+    const evm = c.req.query('evm')?.trim().toLowerCase()
+    if (wallet) await syncUsdtFunds(match, wallet, evm)
+    persist()
+    return c.json(publicMatch(match, wallet))
   })
 
   app.get('/api/matches/:id', async (c) => {

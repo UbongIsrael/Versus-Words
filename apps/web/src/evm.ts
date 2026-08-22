@@ -10,14 +10,77 @@ function provider(): Ethereum {
   return eth
 }
 
+const EVM_KEY = 'versus-evm-address'
+
+function lockKey(matchId: string) {
+  return `versus-lock:${matchId}`
+}
+
+export function rememberLock(matchId: string, evm: string, txHash: string) {
+  localStorage.setItem(lockKey(matchId), JSON.stringify({ evm: evm.toLowerCase(), txHash }))
+  localStorage.setItem(EVM_KEY, evm.toLowerCase())
+}
+
+export function recallLock(matchId: string): { evm: string; txHash: string } | null {
+  try {
+    const raw = localStorage.getItem(lockKey(matchId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { evm?: string; txHash?: string }
+    if (!parsed.evm || !parsed.txHash) return null
+    return { evm: parsed.evm.toLowerCase(), txHash: parsed.txHash }
+  } catch {
+    return null
+  }
+}
+
+async function waitForEthereum(ms = 2500): Promise<Ethereum | null> {
+  const start = Date.now()
+  while (Date.now() - start < ms) {
+    const eth = (window as Window & { ethereum?: Ethereum }).ethereum
+    if (eth) return eth
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  return (window as Window & { ethereum?: Ethereum }).ethereum ?? null
+}
+
 /** No popup. Empty if the wallet is locked or not connected. */
 export async function peekEvmAddress(): Promise<string | null> {
+  const cached = localStorage.getItem(EVM_KEY)?.toLowerCase()
+  if (cached && /^0x[0-9a-f]{40}$/.test(cached)) return cached
   try {
-    const eth = (window as Window & { ethereum?: Ethereum }).ethereum
+    const eth = await waitForEthereum()
     if (!eth) return null
     const accounts = (await eth.request({ method: 'eth_accounts' })) as string[]
     const address = accounts[0]
-    return address ? address.toLowerCase() : null
+    if (!address) return null
+    const evm = address.toLowerCase()
+    localStorage.setItem(EVM_KEY, evm)
+    return evm
+  } catch {
+    return null
+  }
+}
+
+/** Prefer cache / silent accounts; prompt only if we still have nothing. Does not fail if chain switch is unsupported (Nimiq Pay). */
+export async function resolveEvmAddress(chainId?: number): Promise<string | null> {
+  const peeked = await peekEvmAddress()
+  if (peeked) return peeked
+  try {
+    const eth = await waitForEthereum()
+    if (!eth) return null
+    if (chainId) {
+      try {
+        await ensureChain(eth, chainId)
+      } catch {
+        /* Pay may not switch networks; still request accounts. */
+      }
+    }
+    const accounts = (await eth.request({ method: 'eth_requestAccounts' })) as string[]
+    const address = accounts[0]
+    if (!address) return null
+    const evm = address.toLowerCase()
+    localStorage.setItem(EVM_KEY, evm)
+    return evm
   } catch {
     return null
   }
@@ -51,6 +114,7 @@ export async function lockUsdt(opts: {
     to: opts.escrow,
     data: encodeLock(opts.matchId, opts.amount),
   })
+  rememberLock(opts.matchId, from, txHash)
   return { evmAddress: from, txHash }
 }
 
