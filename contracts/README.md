@@ -52,3 +52,5 @@ cd contracts && npm test
 
 Use real USDT: `0xc2132D05D31c914a87C6611C10748AEb04B58e8F`.  
 Do **not** deploy `MockUSDT` on mainnet. Verify `VersusEscrow` on Polygonscan.
+
+Live VersusEscrow: `0x62deD4A114106058D17C8d38254F5C0e1A432c95` — see [deployments-polygon.md](deployments-polygon.md).
