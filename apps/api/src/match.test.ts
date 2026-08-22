@@ -3,12 +3,16 @@ import {
   acceptRematch,
   applyFund,
   applyScore,
+  canViewerClaim,
   createMatch,
   declineRematch,
   expireMatch,
   joinMatch,
+  keepForClaim,
   leaveMatch,
   liveRematchOffer,
+  markClaimed,
+  markSeatFunded,
   memoBelongsTo,
   publicMatch,
   rematchFrom,
@@ -174,6 +178,34 @@ describe('versus match', () => {
     expect(sweepMatch(match, 1_000 + REMATCH_OFFER_MS)).toBe(true)
     expect(match.rematchOffer).toBeUndefined()
     expect(() => acceptRematch(match, BOB, 1_000 + REMATCH_OFFER_MS)).toThrow('no-offer')
+  })
+
+  it('keeps a USDT win claimable after the winner leaves', () => {
+    const match = createMatch(ALICE, { amount: 3, asset: 'USDT' })
+    joinMatch(match, BOB)
+    markSeatFunded(match, ALICE, '0x1111111111111111111111111111111111111111', 'tx-a')
+    markSeatFunded(match, BOB, '0x2222222222222222222222222222222222222222', 'tx-b')
+    applyScore(match, ALICE, ['CAT', 'DOG'], [])
+    applyScore(match, BOB, ['CAT'], [])
+    leaveMatch(match, ALICE)
+    expect(canViewerClaim(match, ALICE)).toBe(true)
+    expect(canViewerClaim(match, BOB)).toBe(false)
+    expect(keepForClaim(match)).toBe(true)
+    expect(publicMatch(match, ALICE).claimedOnChain).toBe(false)
+    markClaimed(match, '0xabc')
+    expect(canViewerClaim(match, ALICE)).toBe(false)
+    expect(publicMatch(match, ALICE).claimedOnChain).toBe(true)
+  })
+
+  it('lets both players claim a USDT tie', () => {
+    const match = createMatch(ALICE, { amount: 1, asset: 'USDT' })
+    joinMatch(match, BOB)
+    markSeatFunded(match, ALICE, '0x1111111111111111111111111111111111111111', 'tx-a')
+    markSeatFunded(match, BOB, '0x2222222222222222222222222222222222222222', 'tx-b')
+    applyScore(match, ALICE, ['CAT'], [])
+    applyScore(match, BOB, ['DOG'], [])
+    expect(canViewerClaim(match, ALICE)).toBe(true)
+    expect(canViewerClaim(match, BOB)).toBe(true)
   })
 
   it('lets either player decline a rematch offer', () => {

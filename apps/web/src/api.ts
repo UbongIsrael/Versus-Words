@@ -66,6 +66,8 @@ export type MatchView = {
     uniqueScore: number | null
     evmAddress?: string | null
   } | null
+  claimedOnChain: boolean
+  claimTx: string | null
   overlay: {
     scoreA: number
     scoreB: number
@@ -95,6 +97,12 @@ export type AppConfig = {
     chainId: number
     oracle: string | null
   }
+}
+
+export type ClaimRow = {
+  matchId: string
+  amount: number
+  action: 'settle' | 'timeout'
 }
 
 export type DailyInfo = {
@@ -176,6 +184,13 @@ export const api = {
     req<{ signature: string; oracle: string; winner: 0 | 1 | 2; matchId: string }>(
       `/api/matches/${id}/settle-sig`,
     ),
+  claims: (evm: string) =>
+    req<{ claims: ClaimRow[] }>(`/api/claims?evm=${encodeURIComponent(evm)}`),
+  markClaimed: (id: string, txHash?: string) =>
+    req<MatchView>(`/api/matches/${id}/claimed`, {
+      method: 'POST',
+      body: JSON.stringify({ txHash }),
+    }),
 }
 
 export async function loadDictionary(): Promise<string> {

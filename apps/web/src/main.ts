@@ -7,9 +7,25 @@ import {
   type Dictionary,
   type InputEvent,
 } from '@versus/sim'
-import { api, loadDictionary, type DailyInfo, type IssuedRun, type Leaderboard, type MatchView } from './api.ts'
+import {
+  api,
+  loadDictionary,
+  type ClaimRow,
+  type DailyInfo,
+  type IssuedRun,
+  type Leaderboard,
+  type MatchView,
+} from './api.ts'
 import { mountGrid, type GridView } from './grid-view.ts'
-import { evmAccount, lockUsdt, peekEvmAddress, recallLock, resolveEvmAddress, submitSettle } from './evm.ts'
+import {
+  evmAccount,
+  lockUsdt,
+  peekEvmAddress,
+  recallLock,
+  resolveEvmAddress,
+  submitSettle,
+  submitTimeoutRefund,
+} from './evm.ts'
 import { isPayAvailable, listPayAddress, sendStake, signPayMessage } from './pay.ts'
 import { clearSession, getSession, setSession } from './session.ts'
 import './styles/app.css'
@@ -41,6 +57,10 @@ async function boot() {
     const params = new URLSearchParams(location.search)
     const pending = params.get('v')
     const code = params.get('c')
+    if (params.has('claims')) {
+      await showClaims()
+      return
+    }
     if (pending) {
       await showMatch(pending)
       return
@@ -96,7 +116,8 @@ async function showHome() {
       ${
         session
           ? `<button class="btn btn-primary" data-act="challenge">New versus room</button>
-             <button class="btn btn-ghost" data-act="join-code">Join with a code</button>`
+             <button class="btn btn-ghost" data-act="join-code">Join with a code</button>
+             <button class="btn btn-ghost" data-act="claims">Rewards</button>`
           : ''
       }
       <button class="btn ${session ? 'btn-ghost' : 'btn-primary'}" data-act="daily" ${daily.played ? 'disabled' : ''}>
@@ -123,6 +144,10 @@ async function showHome() {
   root.querySelector('[data-act="free"]')?.addEventListener('click', () => startRun('free'))
   root.querySelector('[data-act="challenge"]')?.addEventListener('click', () => void showNewChallenge())
   root.querySelector('[data-act="join-code"]')?.addEventListener('click', () => showJoinCode())
+  root.querySelector('[data-act="claims"]')?.addEventListener('click', () => {
+    history.replaceState({}, '', '/?claims=1')
+    void showClaims()
+  })
   root.querySelector('[data-act="disconnect"]')?.addEventListener('click', () => {
     clearSession()
     void showHome()
@@ -152,6 +177,70 @@ async function connectWallet() {
     `
     root.querySelector('[data-act="home"]')?.addEventListener('click', () => void showHome())
   }
+}
+
+async function showClaims() {
+  teardownPlay()
+  const goHome = () => {
+    history.replaceState({}, '', '/')
+    void showHome()
+  }
+  root.innerHTML = `<p class="kicker">Checking the contract for pending claims…</p>`
+  let rows: ClaimRow[]
+  try {
+    const evm = (await peekEvmAddress()) ?? (await resolveEvmAddress())
+    if (!evm) {
+      root.innerHTML = `
+        <button class="back" type="button" data-act="home">Back</button>
+        <p class="kicker">No Polygon wallet on this phone.</p>
+      `
+      root.querySelector('[data-act="home"]')?.addEventListener('click', goHome)
+      return
+    }
+    rows = (await api.claims(evm)).claims
+  } catch (err) {
+    root.innerHTML = `
+      <button class="back" type="button" data-act="home">Back</button>
+      <p class="kicker">${escapeHtml(err instanceof Error ? err.message : 'claims-failed')}</p>
+    `
+    root.querySelector('[data-act="home"]')?.addEventListener('click', goHome)
+    return
+  }
+
+  root.innerHTML = `
+    <button class="back" type="button" data-act="home">Back</button>
+    <h1 class="wordmark">Rewards</h1>
+    <div class="stack" style="margin-top:22px">
+      ${
+        rows.length
+          ? rows
+              .map(
+                (row) => `
+            <section class="card">
+              <div class="mode-tag">Pending</div>
+              <h2 style="font-size:32px;margin:8px 0 4px">${escapeHtml(formatAmount(row.amount))} USDT</h2>
+              <button class="btn btn-primary" data-act="claim" data-id="${escapeHtml(row.matchId)}" data-action="${row.action}" style="width:100%;margin-top:12px">Claim</button>
+            </section>`,
+              )
+              .join('')
+          : `<section class="card"><p class="kicker">No pending claims.</p></section>`
+      }
+    </div>
+  `
+  root.querySelector('[data-act="home"]')?.addEventListener('click', goHome)
+  root.querySelectorAll<HTMLButtonElement>('[data-act="claim"]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id
+      if (!id) return
+      const action = btn.dataset.action === 'timeout' ? 'timeout' : 'settle'
+      btn.disabled = true
+      btn.textContent = 'Claiming…'
+      void claimUsdt(id, () => showClaims(), action).finally(() => {
+        btn.disabled = false
+        btn.textContent = 'Claim'
+      })
+    })
+  })
 }
 
 function humanConnectError(code: string): string {
@@ -625,22 +714,45 @@ function closedCopy(reason: string | null) {
   return 'This room is closed — create a new one.'
 }
 
-async function claimUsdt(id: string) {
+async function claimUsdt(id: string, after?: () => void | Promise<void>, action: 'settle' | 'timeout' = 'settle') {
   try {
     const config = await api.config()
     if (!config.usdt.escrow) throw new Error('usdt-escrow-unconfigured')
-    const signed = await api.settleSig(id)
-    const hash = await submitSettle({
-      escrow: config.usdt.escrow,
-      chainId: config.usdt.chainId,
-      matchId: signed.matchId,
-      winner: signed.winner,
-      signature: signed.signature,
-    })
+    let hash: string
+    if (action === 'timeout') {
+      hash = await submitTimeoutRefund({
+        escrow: config.usdt.escrow,
+        chainId: config.usdt.chainId,
+        matchId: id,
+      })
+    } else {
+      const signed = await api.settleSig(id)
+      hash = await submitSettle({
+        escrow: config.usdt.escrow,
+        chainId: config.usdt.chainId,
+        matchId: signed.matchId,
+        winner: signed.winner,
+        signature: signed.signature,
+      })
+    }
+    await api.markClaimed(id, hash).catch(() => undefined)
+    if (after) {
+      await after()
+      return
+    }
     alert(`Claim sent: ${hash}`)
   } catch (err) {
-    alert(err instanceof Error ? err.message : 'claim-failed')
+    alert(humanClaimError(err instanceof Error ? err.message : 'claim-failed'))
   }
+}
+
+function humanClaimError(code: string): string {
+  if (code === 'pot-missing') return 'That pot is gone on Polygon.'
+  if (code === 'not-settled') return 'The room has not finished yet.'
+  if (code === 'usdt-escrow-unconfigured') return 'USDT escrow is not configured.'
+  if (/denied|reject/i.test(code)) return 'Claim was cancelled.'
+  if (/settled|already/i.test(code)) return 'Already claimed.'
+  return code
 }
 
 async function fundSeat(id: string) {
@@ -721,7 +833,7 @@ function settleBlock(match: MatchView): string {
 }
 
 function canClaimUsdt(match: MatchView): boolean {
-  if (match.asset !== 'USDT' || !match.settled || !match.you) return false
+  if (match.asset !== 'USDT' || !match.settled || !match.you || match.claimedOnChain) return false
   if (match.winner === 'tie') return true
   return match.winner === match.you.address
 }
@@ -821,6 +933,7 @@ function matchPaintKey(match: MatchView) {
     match.you?.scored ?? '',
     match.you?.playing ?? '',
     match.winner ?? '',
+    match.claimedOnChain ?? '',
     match.rematch?.from ?? '',
     match.rematch?.expiresAt ?? '',
     match.rematch?.nextId ?? '',

@@ -1,10 +1,28 @@
 import { describe, expect, it } from 'vitest'
-import { encodeLock, encodePotsQuery, matchBytes32, parsePot, settleDigest, toHex } from './abi.ts'
+import {
+  addressTopic,
+  encodeLock,
+  encodePotsQuery,
+  idFromIndexedTopic,
+  lockedEventTopic,
+  matchBytes32,
+  parsePot,
+  settleDigest,
+  toHex,
+} from './abi.ts'
 
 describe('polygon abi', () => {
   it('pads a match id to bytes32', () => {
     expect(matchBytes32('9cc5fd42284bd918')).toBe(
       '0x0000000000000000000000000000000000000000000000009cc5fd42284bd918',
+    )
+  })
+
+  it('recovers a match id from a Locked event topic', () => {
+    expect(lockedEventTopic()).toMatch(/^0x[0-9a-f]{64}$/)
+    expect(idFromIndexedTopic(matchBytes32('9cc5fd42284bd918'))).toBe('9cc5fd42284bd918')
+    expect(addressTopic('0x1111111111111111111111111111111111111111')).toBe(
+      '0x0000000000000000000000001111111111111111111111111111111111111111',
     )
   })
 

@@ -7,12 +7,15 @@ import {
   applyScore,
   createMatch,
   declineRematch,
+  keepForClaim,
+  markClaimed,
   markSeatFunded,
   isClosed,
   isSettled,
   joinMatch,
   leaveMatch,
   publicMatch,
+  payoutFor,
   requestRematch,
   seatOf,
   sweepMatch,
@@ -24,7 +27,7 @@ import {
 import { isGuestId, normalizeWalletAddress } from './nimiq.ts'
 import { createMatchStore } from './persist.ts'
 import type { Store } from './store.ts'
-import { oracleAddress, playerDeposited, readPot, signSettle, winnerCode, USDT_ESCROW, USDT_TOKEN, POLYGON_CHAIN_ID, usdtEscrowConfigured } from './polygon.ts'
+import { oracleAddress, playerDeposited, readPot, listOpenPotsForPlayer, signSettle, winnerCode, USDT_ESCROW, USDT_TOKEN, POLYGON_CHAIN_ID, usdtEscrowConfigured } from './polygon.ts'
 import { newId, signRun } from './token.ts'
 
 type PlayerFn = (c: { req: { header: (n: string) => string | undefined; query: (n: string) => string | undefined } }) =>
@@ -126,7 +129,7 @@ export async function attachMatchRoutes(
     let dirty = false
     for (const [id, match] of matches) {
       if (sweepMatch(match, now)) dirty = true
-      if (match.closedAt && now - match.closedAt > 60 * 60 * 1000) {
+      if (match.closedAt && now - match.closedAt > 60 * 60 * 1000 && !keepForClaim(match, now)) {
         matches.delete(id)
         dirty = true
       }
@@ -149,6 +152,52 @@ export async function attachMatchRoutes(
       },
     }),
   )
+
+  app.get('/api/claims', async (c) => {
+    const evm = (c.req.query('evm') ?? '').trim().toLowerCase()
+    if (!/^0x[0-9a-f]{40}$/.test(evm)) return c.json({ error: 'evm-required' }, 400)
+    const extraIds = [...matches.values()]
+      .filter((m) => (m.asset ?? 'NIM') === 'USDT' && (m.challenger.evmAddress === evm || m.opponent?.evmAddress === evm))
+      .map((m) => m.id)
+    const open = fakeChain()
+      ? extraIds.flatMap((id) => {
+          const match = matches.get(id)
+          if (!match || match.claimedOnChain) return []
+          return [{ id, pot: { amount: BigInt(match.stakeUnits), expiresAt: 0, playerA: evm, playerB: '', deposits: 3, settled: false } }]
+        })
+      : await listOpenPotsForPlayer(evm, extraIds)
+    const nowSec = Math.floor(Date.now() / 1000)
+    const claims = open.flatMap(({ id, pot }) => {
+      const match = matches.get(id) ?? [...matches.values()].find((m) => m.id === id)
+      const gameOver = Boolean(match && isSettled(match))
+      const expired = pot.expiresAt > 0 && nowSec >= pot.expiresAt
+      if (!gameOver && !expired) return []
+      const wallet = walletOf(c)
+      const payout = match && wallet ? payoutFor(match, wallet) : null
+      const units = Number(pot.amount)
+      const amount = (units / 1_000_000) * (payout?.kind === 'win' ? 2 : 1)
+      return [
+        {
+          matchId: match?.id ?? id,
+          amount,
+          action: gameOver ? 'settle' : 'timeout',
+        },
+      ]
+    })
+    return c.json({ claims })
+  })
+
+  app.post('/api/matches/:id/claimed', async (c) => {
+    const wallet = walletOf(c)
+    if (!wallet) return c.json({ error: 'wallet-required' }, 401)
+    const match = matches.get(c.req.param('id'))
+    if (!match) return c.json({ error: 'unknown-match' }, 404)
+    if (!seatOf(match, wallet)) return c.json({ error: 'not-seated' }, 403)
+    const body = await c.req.json().catch(() => ({}))
+    markClaimed(match, typeof body.txHash === 'string' ? body.txHash : undefined)
+    persist()
+    return c.json(publicMatch(match, wallet))
+  })
 
   app.get('/api/transparency', (c) =>
     c.json({

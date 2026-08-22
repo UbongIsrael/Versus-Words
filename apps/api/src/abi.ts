@@ -34,6 +34,18 @@ export function encodePotsQuery(id: string): `0x${string}` {
   return `0x${selector('pots(bytes32)')}${pad32(matchBytes32(id))}`
 }
 
+export function lockedEventTopic(): `0x${string}` {
+  return `0x${toHex(keccak_256(new TextEncoder().encode('Locked(bytes32,address,uint96)')))}`
+}
+
+export function addressTopic(addr: string): `0x${string}` {
+  return `0x${pad32(addr)}`
+}
+
+export function idFromIndexedTopic(topic: string): string {
+  return topic.replace(/^0x/, '').replace(/^0+/, '') || '0'
+}
+
 export function encodeApprove(spender: string, amount: bigint): `0x${string}` {
   return `0x${selector('approve(address,uint256)')}${pad32(spender)}${pad32(amount.toString(16))}`
 }

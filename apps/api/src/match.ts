@@ -11,6 +11,8 @@ export const WAIT_FOR_JOIN_MS = 8 * 60 * 1000
 export const WAIT_FOR_PLAY_MS = 12 * 60 * 1000
 /** After the result screen, rematch window then the code dies. */
 export const SETTLED_KEEP_MS = 10 * 60 * 1000
+/** Keep USDT pots around so a winner who left can still claim. */
+export const CLAIM_KEEP_MS = 7 * 24 * 60 * 60 * 1000
 /** Poll is 2.5s; if we have not seen you for this long, you left. */
 export const PRESENCE_STALE_MS = 45 * 1000
 export const LIVE_RUN_MS = 2 * 60 * 1000
@@ -73,6 +75,8 @@ export type Match = {
   closeReason?: 'idle-no-join' | 'idle-no-play' | 'empty' | 'expired' | 'settled'
   rematchOffer?: RematchOffer
   rematchMatchId?: string
+  claimedOnChain?: boolean
+  claimTx?: string
 }
 
 export type RematchOffer = {
@@ -268,6 +272,30 @@ export function isSettled(match: Match): boolean {
 
 export function isClosed(match: Match): boolean {
   return Boolean(match.closedAt)
+}
+
+export function payoutFor(match: Match, address: string): Payout | null {
+  const wallet = normalizeWalletAddress(address)
+  if (!wallet) return null
+  return match.payouts.find((p) => p.to === wallet) ?? null
+}
+
+export function keepForClaim(match: Match, now = Date.now()): boolean {
+  if ((match.asset ?? 'NIM') !== 'USDT') return false
+  if (!isSettled(match) || match.claimedOnChain) return false
+  const closedAt = match.closedAt ?? match.settledAt ?? match.createdAt
+  return now - closedAt < CLAIM_KEEP_MS
+}
+
+export function canViewerClaim(match: Match, address: string, now = Date.now()): boolean {
+  if (!keepForClaim(match, now)) return false
+  const payout = payoutFor(match, address)
+  return Boolean(payout && (payout.kind === 'win' || payout.kind === 'refund'))
+}
+
+export function markClaimed(match: Match, txHash?: string) {
+  match.claimedOnChain = true
+  if (txHash) match.claimTx = txHash
 }
 
 export function touchPresence(match: Match, address: string, now = Date.now()): Seat | null {
@@ -497,6 +525,8 @@ export function publicMatch(match: Match, viewer?: string | null) {
         ? versusScores(match.challenger.words ?? [], match.opponent.words ?? [])
         : null,
     rematch: rematchView(match, you?.address ?? null),
+    claimedOnChain: Boolean(match.claimedOnChain),
+    claimTx: match.claimTx ?? null,
   }
 }
 
