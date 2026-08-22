@@ -70,6 +70,14 @@ export type MatchView = {
     uniqueB: string[]
     shared: string[]
   } | null
+  rematch: {
+    nextId: string | null
+    from: string | null
+    expiresAt: number | null
+    remainingMs: number
+    youOffered: boolean
+    incoming: boolean
+  } | null
 }
 
 export type AppConfig = {
@@ -154,6 +162,10 @@ export const api = {
   joinMatch: (id: string) => req<MatchView>(`/api/matches/${id}/join`, { method: 'POST', body: '{}' }),
   startVersus: (id: string) => req<IssuedRun>(`/api/matches/${id}/run`, { method: 'POST', body: '{}' }),
   rematch: (id: string) => req<MatchView>(`/api/matches/${id}/rematch`, { method: 'POST', body: '{}' }),
+  acceptRematch: (id: string) =>
+    req<MatchView>(`/api/matches/${id}/rematch/accept`, { method: 'POST', body: '{}' }),
+  declineRematch: (id: string) =>
+    req<MatchView>(`/api/matches/${id}/rematch/decline`, { method: 'POST', body: '{}' }),
   leaveMatch: (id: string) => req<MatchView>(`/api/matches/${id}/leave`, { method: 'POST', body: '{}' }),
   fundMatch: (id: string, body?: { txHash?: string; evmAddress?: string }) =>
     req<MatchView>(`/api/matches/${id}/fund`, { method: 'POST', body: JSON.stringify(body ?? {}) }),

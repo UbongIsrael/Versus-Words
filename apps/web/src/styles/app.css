@@ -300,3 +300,10 @@ input.code {
   text-align: center;
   margin: 8px 0 0;
 }
+
+.rematch-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}

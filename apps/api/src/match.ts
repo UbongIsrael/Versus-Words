@@ -14,6 +14,8 @@ export const SETTLED_KEEP_MS = 10 * 60 * 1000
 /** Poll is 2.5s; if we have not seen you for this long, you left. */
 export const PRESENCE_STALE_MS = 45 * 1000
 export const LIVE_RUN_MS = 2 * 60 * 1000
+export const RUN_MS = 90_000
+export const REMATCH_OFFER_MS = 5_000
 export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
 export type Asset = 'NIM' | 'USDT'
@@ -69,6 +71,13 @@ export type Match = {
   lastActivityAt: number
   closedAt?: number
   closeReason?: 'idle-no-join' | 'idle-no-play' | 'empty' | 'expired' | 'settled'
+  rematchOffer?: RematchOffer
+  rematchMatchId?: string
+}
+
+export type RematchOffer = {
+  from: string
+  expiresAt: number
 }
 
 export type ChainTx = {
@@ -169,10 +178,60 @@ export function rematchFrom(previous: Match, now = Date.now()): Match {
       amount: previous.stakeAmount ?? previous.stakeLuna / LUNA_PER_NIM,
       asset: previous.asset ?? 'NIM',
       scoreMode: previous.scoreMode ?? 'unique',
+      code: previous.code,
     },
     now,
   )
-  next.opponent = { address: previous.opponent.address, funded: false }
+  next.challenger.present = true
+  next.challenger.lastSeenAt = now
+  next.opponent = { address: previous.opponent.address, funded: false, present: true, lastSeenAt: now }
+  return next
+}
+
+export function liveRematchOffer(match: Match, now = Date.now()): RematchOffer | null {
+  if (!match.rematchOffer) return null
+  if (now >= match.rematchOffer.expiresAt) return null
+  return match.rematchOffer
+}
+
+export function requestRematch(match: Match, address: string, now = Date.now()): Match | null {
+  if (!isSettled(match) || isClosed(match)) throw new Error('not-settled')
+  if (match.rematchMatchId) throw new Error('already-rematched')
+  const seat = seatOf(match, address)
+  if (!seat) throw new Error('not-seated')
+  const live = liveRematchOffer(match, now)
+  if (live && live.from !== seat.address) return sealRematch(match, now)
+  if (live && live.from === seat.address) return null
+  match.rematchOffer = { from: seat.address, expiresAt: now + REMATCH_OFFER_MS }
+  match.lastActivityAt = now
+  return null
+}
+
+export function acceptRematch(match: Match, address: string, now = Date.now()): Match {
+  if (!isSettled(match) || isClosed(match)) throw new Error('not-settled')
+  if (match.rematchMatchId) throw new Error('already-rematched')
+  const seat = seatOf(match, address)
+  if (!seat) throw new Error('not-seated')
+  const live = liveRematchOffer(match, now)
+  if (!live) throw new Error('no-offer')
+  if (live.from === seat.address) throw new Error('self-accept')
+  return sealRematch(match, now)
+}
+
+export function declineRematch(match: Match, address: string, now = Date.now()): boolean {
+  const seat = seatOf(match, address)
+  if (!seat) throw new Error('not-seated')
+  if (!match.rematchOffer) return false
+  match.rematchOffer = undefined
+  match.lastActivityAt = now
+  return true
+}
+
+function sealRematch(match: Match, now: number): Match {
+  const next = rematchFrom(match, now)
+  match.rematchMatchId = next.id
+  match.rematchOffer = undefined
+  match.lastActivityAt = now
   return next
 }
 
@@ -249,12 +308,17 @@ export function closeRoom(
 }
 
 export function sweepMatch(match: Match, now = Date.now()): boolean {
-  if (isClosed(match)) return false
-  if (hasLiveRun(match, now)) return false
+  let changed = false
+  if (match.rematchOffer && now >= match.rematchOffer.expiresAt) {
+    match.rematchOffer = undefined
+    changed = true
+  }
+  if (isClosed(match)) return changed
+  if (hasLiveRun(match, now)) return changed
 
   if (isSettled(match)) {
     if (now - (match.settledAt ?? now) >= SETTLED_KEEP_MS) return closeRoom(match, 'settled', now)
-    return false
+    return changed
   }
 
   if (now >= match.expiresAt) {
@@ -431,6 +495,20 @@ export function publicMatch(match: Match, viewer?: string | null) {
       bothScored(match) && match.opponent
         ? versusScores(match.challenger.words ?? [], match.opponent.words ?? [])
         : null,
+    rematch: rematchView(match, you?.address ?? null),
+  }
+}
+
+function rematchView(match: Match, viewer: string | null) {
+  if (!isSettled(match)) return null
+  const offer = liveRematchOffer(match)
+  return {
+    nextId: match.rematchMatchId ?? null,
+    from: offer?.from ?? null,
+    expiresAt: offer?.expiresAt ?? null,
+    remainingMs: offer ? Math.max(0, offer.expiresAt - Date.now()) : 0,
+    youOffered: Boolean(offer && viewer && offer.from === viewer),
+    incoming: Boolean(offer && viewer && offer.from !== viewer),
   }
 }
 

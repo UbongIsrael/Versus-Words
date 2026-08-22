@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import {
+  acceptRematch,
   applyFund,
   applyScore,
   createMatch,
+  declineRematch,
   expireMatch,
   joinMatch,
   leaveMatch,
+  liveRematchOffer,
   memoBelongsTo,
   rematchFrom,
+  requestRematch,
   sweepMatch,
+  REMATCH_OFFER_MS,
   WAIT_FOR_JOIN_MS,
 } from './match.ts'
 
@@ -24,6 +29,16 @@ function fundTx(from: string, matchId: string, value = 100_000) {
     value,
     recipientData: `vw:${matchId}`,
   }
+}
+
+function settledDuel() {
+  const match = createMatch(ALICE, 1)
+  joinMatch(match, BOB)
+  applyFund(match, fundTx(ALICE, match.id), ESCROW)
+  applyFund(match, fundTx(BOB, match.id), ESCROW)
+  applyScore(match, ALICE, ['CAT'], [])
+  applyScore(match, BOB, ['DOG'], [])
+  return match
 }
 
 describe('versus match', () => {
@@ -105,15 +120,53 @@ describe('versus match', () => {
     )
   })
 
-  it('opens a rematch with a new seed and empty funds', () => {
+  it('opens a rematch with a new seed, empty funds, and the same room code', () => {
     const match = createMatch(ALICE, 10)
     joinMatch(match, BOB)
     const next = rematchFrom(match)
     expect(next.id).not.toBe(match.id)
     expect(next.seed).not.toBe(match.seed)
+    expect(next.code).toBe(match.code)
     expect(next.stakeLuna).toBe(1_000_000)
     expect(next.opponent?.address).toBe(BOB)
     expect(next.challenger.funded).toBe(false)
+  })
+
+  it('waits for the other player to accept a rematch', () => {
+    const match = settledDuel()
+    expect(requestRematch(match, ALICE, 1_000)).toBeNull()
+    expect(liveRematchOffer(match, 1_000)?.from).toBe(ALICE)
+    expect(() => acceptRematch(match, ALICE, 1_000)).toThrow('self-accept')
+    const next = acceptRematch(match, BOB, 2_000)
+    expect(next.code).toBe(match.code)
+    expect(next.id).not.toBe(match.id)
+    expect(match.rematchMatchId).toBe(next.id)
+    expect(liveRematchOffer(match, 2_000)).toBeNull()
+  })
+
+  it('pairs both rematch clicks into one room', () => {
+    const match = settledDuel()
+    expect(requestRematch(match, ALICE, 1_000)).toBeNull()
+    const next = requestRematch(match, BOB, 2_000)
+    expect(next?.code).toBe(match.code)
+    expect(match.rematchMatchId).toBe(next?.id)
+  })
+
+  it('expires a rematch offer after 5 seconds', () => {
+    const match = settledDuel()
+    expect(requestRematch(match, ALICE, 1_000)).toBeNull()
+    expect(liveRematchOffer(match, 1_000 + REMATCH_OFFER_MS - 1)).toBeTruthy()
+    expect(liveRematchOffer(match, 1_000 + REMATCH_OFFER_MS)).toBeNull()
+    expect(sweepMatch(match, 1_000 + REMATCH_OFFER_MS)).toBe(true)
+    expect(match.rematchOffer).toBeUndefined()
+    expect(() => acceptRematch(match, BOB, 1_000 + REMATCH_OFFER_MS)).toThrow('no-offer')
+  })
+
+  it('lets either player decline a rematch offer', () => {
+    const match = settledDuel()
+    requestRematch(match, ALICE, 1_000)
+    expect(declineRematch(match, BOB, 1_500)).toBe(true)
+    expect(liveRematchOffer(match, 1_500)).toBeNull()
   })
 
   it('accepts a custom NIM amount and a short room code', () => {

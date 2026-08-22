@@ -2,20 +2,23 @@ import type { Hono } from 'hono'
 import type { InputEvent } from '@versus/sim'
 import { ESCROW_ADDRESS, escrowConfigured, fakeChain, fetchIncoming, fetchTx } from './chain.ts'
 import {
+  acceptRematch,
   applyFund,
   applyScore,
   createMatch,
+  declineRematch,
   markSeatFunded,
   isClosed,
   isSettled,
   joinMatch,
   leaveMatch,
   publicMatch,
-  rematchFrom,
+  requestRematch,
   seatOf,
   sweepMatch,
   touchPresence,
   normalizeRoomCode,
+  RUN_MS,
   type Match,
 } from './match.ts'
 import { isGuestId, normalizeWalletAddress } from './nimiq.ts'
@@ -310,13 +313,14 @@ export async function attachMatchRoutes(
     if (seat.words) return c.json({ error: 'already-scored' }, 409)
     if (seat.runId) {
       const existing = opts.store.getRun(seat.runId)
-      if (existing && !existing.consumed) {
+      const remaining = existing ? RUN_MS - (Date.now() - existing.startTs) : 0
+      if (existing && !existing.consumed && remaining > 0) {
         return c.json({
           runId: existing.runId,
           seed: existing.seed,
           mode: existing.mode,
           startTs: existing.startTs,
-          durationMs: 90_000,
+          durationMs: RUN_MS,
           token: signRun(opts.secret, existing),
           matchId: match.id,
         })
@@ -342,7 +346,7 @@ export async function attachMatchRoutes(
       seed: run.seed,
       mode: run.mode,
       startTs,
-      durationMs: 90_000,
+      durationMs: RUN_MS,
       token: signRun(opts.secret, run),
       matchId: match.id,
     })
@@ -373,15 +377,56 @@ export async function attachMatchRoutes(
     if (!wallet) return c.json({ error: 'wallet-required' }, 401)
     const match = matches.get(c.req.param('id'))
     if (!match) return c.json({ error: 'unknown-match' }, 404)
-    if (!isSettled(match)) return c.json({ error: 'not-settled' }, 409)
     if (!seatOf(match, wallet)) return c.json({ error: 'not-seated' }, 403)
     try {
-      const next = rematchFrom(match)
+      const existingId = match.rematchMatchId
+      if (existingId) {
+        const existing = matches.get(existingId)
+        if (existing) return c.json(publicMatch(existing, wallet))
+      }
+      const next = requestRematch(match, wallet)
+      if (next) {
+        matches.set(next.id, next)
+        persist()
+        return c.json(publicMatch(next, wallet), 201)
+      }
+      persist()
+      return c.json(publicMatch(match, wallet))
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : 'rematch-failed' }, 400)
+    }
+  })
+
+  app.post('/api/matches/:id/rematch/accept', async (c) => {
+    const wallet = walletOf(c)
+    if (!wallet) return c.json({ error: 'wallet-required' }, 401)
+    const match = matches.get(c.req.param('id'))
+    if (!match) return c.json({ error: 'unknown-match' }, 404)
+    try {
+      if (match.rematchMatchId) {
+        const existing = matches.get(match.rematchMatchId)
+        if (existing) return c.json(publicMatch(existing, wallet))
+      }
+      const next = acceptRematch(match, wallet)
       matches.set(next.id, next)
       persist()
       return c.json(publicMatch(next, wallet), 201)
     } catch (err) {
-      return c.json({ error: err instanceof Error ? err.message : 'rematch-failed' }, 400)
+      return c.json({ error: err instanceof Error ? err.message : 'accept-failed' }, 400)
+    }
+  })
+
+  app.post('/api/matches/:id/rematch/decline', async (c) => {
+    const wallet = walletOf(c)
+    if (!wallet) return c.json({ error: 'wallet-required' }, 401)
+    const match = matches.get(c.req.param('id'))
+    if (!match) return c.json({ error: 'unknown-match' }, 404)
+    try {
+      declineRematch(match, wallet)
+      persist()
+      return c.json(publicMatch(match, wallet))
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : 'decline-failed' }, 400)
     }
   })
 

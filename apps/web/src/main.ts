@@ -22,6 +22,10 @@ let dict: Dictionary | null = null
 let gridView: GridView | null = null
 let timer: number | null = null
 let matchPoll: number | null = null
+let rematchTick: number | null = null
+let playActive = false
+let matchViewGen = 0
+let paintedMatchKey = ''
 
 boot()
 
@@ -176,7 +180,11 @@ async function startRun(mode: 'free' | 'daily') {
 
 function showPlay(run: IssuedRun) {
   if (!dict) return
+  playActive = true
+  stopMatchPoll()
+  clearPlaySurface()
   const cells = generateGridFromHex(run.seed)
+  const durationMs = run.durationMs > 0 ? run.durationMs : 90_000
   const inputs: InputEvent[] = []
   const found = new Set<string>()
   let livePath: number[] = []
@@ -265,7 +273,8 @@ function showPlay(run: IssuedRun) {
   })
 
   const tick = () => {
-    const left = Math.max(0, run.durationMs - (Date.now() - run.startTs))
+    if (!playActive) return
+    const left = Math.max(0, durationMs - (Date.now() - run.startTs))
     const secs = Math.ceil(left / 1000)
     clockEl.textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
     clockEl.classList.toggle('warn', secs <= 10)
@@ -415,7 +424,8 @@ async function openByCode(code: string) {
 }
 
 async function showMatch(id: string) {
-  teardownPlay()
+  if (playActive) return
+  const gen = ++matchViewGen
   stopMatchPoll()
   let match: MatchView
   try {
@@ -423,6 +433,7 @@ async function showMatch(id: string) {
     const recalled = recallLock(id)
     const evm =
       recalled?.evm ?? (await resolveEvmAddress(config?.usdt.chainId)) ?? null
+    if (playActive || gen !== matchViewGen) return
     if (recalled) {
       try {
         await api.fundMatch(id, { evmAddress: recalled.evm, txHash: recalled.txHash })
@@ -430,8 +441,10 @@ async function showMatch(id: string) {
         /* still load the match */
       }
     }
+    if (playActive || gen !== matchViewGen) return
     match = await api.getMatch(id, evm ?? undefined)
   } catch {
+    if (playActive || gen !== matchViewGen) return
     root.innerHTML = `<p class="kicker">Match not found.</p><button class="btn btn-primary" data-act="home">Home</button>`
     root.querySelector('[data-act="home"]')?.addEventListener('click', () => {
       history.replaceState({}, '', '/')
@@ -440,7 +453,17 @@ async function showMatch(id: string) {
     return
   }
 
+  if (playActive || gen !== matchViewGen) return
+
+  if (match.rematch?.nextId && match.rematch.nextId !== id) {
+    history.replaceState({}, '', `/?v=${match.rematch.nextId}`)
+    paintedMatchKey = ''
+    await showMatch(match.rematch.nextId)
+    return
+  }
+
   if (match.closed) {
+    paintedMatchKey = ''
     root.innerHTML = `
       <p class="kicker">${escapeHtml(closedCopy(match.closeReason))}</p>
       <button class="btn btn-primary" data-act="home">Home</button>
@@ -452,6 +475,13 @@ async function showMatch(id: string) {
     return
   }
 
+  const key = matchPaintKey(match)
+  if (key === paintedMatchKey && root.querySelector(`[data-match-id="${id}"]`)) {
+    scheduleMatchPoll(id, match)
+    return
+  }
+  paintedMatchKey = key
+
   const session = getSession()
   const link = `${location.origin}/?c=${match.code}`
   const youNeedWallet = !session
@@ -462,7 +492,7 @@ async function showMatch(id: string) {
   const modeLabel = match.scoreMode === 'count' ? 'Most words' : 'Unique words'
 
   root.innerHTML = `
-    <div class="play-head">
+    <div class="play-head" data-match-id="${escapeHtml(match.id)}">
       <button class="back" type="button" data-act="home">Home</button>
       <div class="mode-tag">${escapeHtml(stakeLabel)} · ${modeLabel}</div>
     </div>
@@ -501,6 +531,7 @@ async function showMatch(id: string) {
   root.querySelector('[data-act="join"]')?.addEventListener('click', async () => {
     try {
       await api.joinMatch(id)
+      paintedMatchKey = ''
       await showMatch(id)
     } catch (err) {
       alert(err instanceof Error ? err.message : 'join-failed')
@@ -508,27 +539,25 @@ async function showMatch(id: string) {
   })
   root.querySelector('[data-act="fund"]')?.addEventListener('click', () => void fundSeat(id))
   root.querySelector('[data-act="play"]')?.addEventListener('click', async () => {
+    playActive = true
+    matchViewGen += 1
+    stopMatchPoll()
     try {
       const run = await api.startVersus(id)
       showPlay(run)
     } catch (err) {
+      playActive = false
+      paintedMatchKey = ''
       alert(err instanceof Error ? err.message : 'run-failed')
+      await showMatch(id)
     }
   })
   root.querySelector('[data-act="claim"]')?.addEventListener('click', () => void claimUsdt(id))
-  root.querySelector('[data-act="rematch"]')?.addEventListener('click', async () => {
-    try {
-      const next = await api.rematch(id)
-      history.replaceState({}, '', `/?v=${next.id}`)
-      await showMatch(next.id)
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'rematch-failed')
-    }
-  })
-
-  if (!match.settled && !match.closed) {
-    matchPoll = window.setTimeout(() => void showMatch(id), 2500)
-  }
+  root.querySelector('[data-act="rematch"]')?.addEventListener('click', () => void offerRematch(id))
+  root.querySelector('[data-act="accept"]')?.addEventListener('click', () => void acceptIncomingRematch(id))
+  root.querySelector('[data-act="decline"]')?.addEventListener('click', () => void declineIncomingRematch(id))
+  if (match.rematch?.expiresAt) startRematchClock(match.rematch.expiresAt)
+  scheduleMatchPoll(id, match)
 }
 
 function closedCopy(reason: string | null) {
@@ -629,9 +658,68 @@ function settleBlock(match: MatchView): string {
           ? `<button class="btn btn-ghost" data-act="claim" style="width:100%;margin-top:12px">Claim USDT on Polygon</button>`
           : ''
       }
-      <button class="btn btn-primary" data-act="rematch" style="width:100%;margin-top:12px">Rematch</button>
+      ${rematchBlock(match)}
     </section>
   `
+}
+
+function rematchBlock(match: MatchView): string {
+  const rematch = match.rematch
+  const secs = Math.max(0, Math.ceil((rematch?.remainingMs ?? 0) / 1000))
+  if (rematch?.incoming) {
+    return `
+      <p class="kicker" style="margin-top:12px">Rematch? <span data-el="rematch-clock">${secs}s</span></p>
+      <div class="rematch-row">
+        <button class="btn btn-primary" data-act="accept">Accept</button>
+        <button class="btn btn-ghost" data-act="decline">Decline</button>
+      </div>
+    `
+  }
+  if (rematch?.youOffered) {
+    return `<p class="kicker" style="margin-top:12px">Waiting for them to accept… <span data-el="rematch-clock">${secs}s</span></p>`
+  }
+  return `<button class="btn btn-primary" data-act="rematch" style="width:100%;margin-top:12px">Rematch</button>`
+}
+
+async function goToMatch(id: string) {
+  history.replaceState({}, '', `/?v=${id}`)
+  paintedMatchKey = ''
+  await showMatch(id)
+}
+
+async function offerRematch(id: string) {
+  try {
+    const next = await api.rematch(id)
+    if (next.id !== id) {
+      await goToMatch(next.id)
+      return
+    }
+    paintedMatchKey = ''
+    await showMatch(id)
+  } catch (err) {
+    alert(err instanceof Error ? err.message : 'rematch-failed')
+  }
+}
+
+async function acceptIncomingRematch(id: string) {
+  try {
+    const next = await api.acceptRematch(id)
+    await goToMatch(next.id)
+  } catch (err) {
+    alert(err instanceof Error ? err.message : 'accept-failed')
+    paintedMatchKey = ''
+    await showMatch(id)
+  }
+}
+
+async function declineIncomingRematch(id: string) {
+  try {
+    await api.declineRematch(id)
+    paintedMatchKey = ''
+    await showMatch(id)
+  } catch (err) {
+    alert(err instanceof Error ? err.message : 'decline-failed')
+  }
 }
 
 function formatAmount(value: number) {
@@ -653,6 +741,31 @@ function shortAddr(address: string) {
   return `${compact.slice(0, 6)}…${compact.slice(-4)}`
 }
 
+function matchPaintKey(match: MatchView) {
+  return [
+    match.id,
+    match.closed,
+    match.settled,
+    match.opponent?.address ?? '',
+    match.challenger.funded,
+    match.challenger.scored,
+    match.opponent?.funded ?? '',
+    match.opponent?.scored ?? '',
+    match.you?.funded ?? '',
+    match.you?.scored ?? '',
+    match.winner ?? '',
+    match.rematch?.from ?? '',
+    match.rematch?.expiresAt ?? '',
+    match.rematch?.nextId ?? '',
+  ].join('|')
+}
+
+function scheduleMatchPoll(id: string, match: MatchView) {
+  if (playActive || match.closed) return
+  const ms = match.settled || match.rematch?.from ? 500 : 2500
+  matchPoll = window.setTimeout(() => void showMatch(id), ms)
+}
+
 function stopMatchPoll() {
   if (matchPoll !== null) {
     window.clearTimeout(matchPoll)
@@ -660,14 +773,40 @@ function stopMatchPoll() {
   }
 }
 
-function teardownPlay() {
+function startRematchClock(expiresAt: number) {
+  stopRematchTick()
+  const tick = () => {
+    const el = root.querySelector('[data-el="rematch-clock"]')
+    const left = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000))
+    if (el) el.textContent = `${left}s`
+    if (left <= 0) return
+    rematchTick = window.setTimeout(tick, 200)
+  }
+  tick()
+}
+
+function stopRematchTick() {
+  if (rematchTick !== null) {
+    window.clearTimeout(rematchTick)
+    rematchTick = null
+  }
+}
+
+function clearPlaySurface() {
   if (timer !== null) {
     window.clearTimeout(timer)
     timer = null
   }
-  stopMatchPoll()
   gridView?.destroy()
   gridView = null
+}
+
+function teardownPlay() {
+  playActive = false
+  paintedMatchKey = ''
+  clearPlaySurface()
+  stopMatchPoll()
+  stopRematchTick()
 }
 
 function vibrate(ms: number) {

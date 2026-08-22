@@ -32,7 +32,7 @@ export async function readPot(id: string) {
   return parsePot(data)
 }
 
-export function playerDeposited(pot: ReturnType<typeof parsePot>, evm: string): boolean {
+export function playerDeposited(pot: ReturnType<typeof parsePot> | null, evm: string): boolean {
   if (!pot) return false
   const addr = evm.toLowerCase()
   if (pot.playerA === addr) return (pot.deposits & 1) !== 0
