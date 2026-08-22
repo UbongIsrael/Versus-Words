@@ -22,7 +22,9 @@ Env templates: [apps/web/.env.example](apps/web/.env.example) and [apps/api/.env
 Production (split hosts):
 
 - **Frontend (Vercel):** `VITE_API_URL=https://your-api.example.com` (build-time)
-- **API (Railway / Render / Node):** `CORS_ORIGINS=https://your-frontend.vercel.app`, `PORT`, `RUN_SECRET`, plus chain keys as needed
+- **API (Cloud Run / Railway):** deploy from the **repo root**, not `apps/api`. `@versus/sim` is a local workspace, not an npm package.
+  - Cloud Run: use the root `Dockerfile`. `PORT` is set by the platform (defaults to 8080 there).
+  - Env: `CORS_ORIGINS=https://your-frontend.vercel.app`, `RUN_SECRET`, plus chain keys as needed.
 
 Play in a phone-sized viewport. For Nimiq Pay later: same Wi-Fi, Custom URL → your machine.
 
