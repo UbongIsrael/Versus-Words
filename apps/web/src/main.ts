@@ -14,8 +14,9 @@ import { isPayAvailable, listPayAddress, sendStake, signPayMessage } from './pay
 import { clearSession, getSession, setSession } from './session.ts'
 import './styles/app.css'
 
-const root = document.querySelector<HTMLDivElement>('#app')
-if (!root) throw new Error('#app')
+const rootEl = document.querySelector('#app')
+if (!(rootEl instanceof HTMLDivElement)) throw new Error('#app')
+const root: HTMLDivElement = rootEl
 
 let dict: Dictionary | null = null
 let gridView: GridView | null = null

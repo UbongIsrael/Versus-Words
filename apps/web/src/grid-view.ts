@@ -20,8 +20,9 @@ type Handlers = {
 export function mountGrid(parent: HTMLElement, cells: Cell[], handlers: Handlers): GridView {
   const canvas = document.createElement('canvas')
   parent.append(canvas)
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('canvas')
+  const maybeCtx = canvas.getContext('2d')
+  if (!maybeCtx) throw new Error('canvas')
+  const ctx: CanvasRenderingContext2D = maybeCtx
 
   let path: number[] = []
   let tracing = false
