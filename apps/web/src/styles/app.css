@@ -153,7 +153,98 @@ button,
 
 .play-dock {
   margin-top: auto;
-  padding-top: 12px;
+  padding-top: 8px;
+}
+
+.play-dock .rack {
+  flex: none;
+  margin: 0 0 14px;
+}
+
+.spell {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 1px;
+  min-height: 92px;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 52px;
+  font-weight: 620;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.spell-letter {
+  display: inline-block;
+}
+
+.spell-letter.in {
+  animation: letter-pop 0.22s cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+
+.spell-pts {
+  margin-left: 8px;
+  font-size: 28px;
+  opacity: 0.9;
+}
+
+.spell.good {
+  color: var(--good);
+  animation: spell-yes 0.5s ease-out;
+}
+
+.spell.bad {
+  color: var(--bad);
+  animation: spell-no 0.5s ease-out;
+}
+
+.spell.already {
+  color: var(--accent);
+  animation: spell-no 0.5s ease-out;
+}
+
+@keyframes letter-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.2) translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes spell-yes {
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.16);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes spell-no {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  18% {
+    transform: translateX(-11px);
+  }
+  36% {
+    transform: translateX(11px);
+  }
+  54% {
+    transform: translateX(-7px);
+  }
+  72% {
+    transform: translateX(7px);
+  }
 }
 
 .pop {

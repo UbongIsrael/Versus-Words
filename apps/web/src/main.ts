@@ -498,8 +498,9 @@ function showAnagramsPlay(run: IssuedRun) {
   const found = new Set<string>()
   const picked: number[] = []
   let status: 'idle' | 'good' | 'bad' | 'already' = 'idle'
-  let statusWord = ''
+  let locked = false
   let submitting = false
+  let clearTimer: number | null = null
 
   root.innerHTML = `
     <div class="play-screen" data-play="1">
@@ -510,11 +511,10 @@ function showAnagramsPlay(run: IssuedRun) {
       </div>
       <div class="found" data-el="found"></div>
       <div class="play-stage">
-        <div class="rack" data-el="rack"></div>
-        <p class="pop" data-el="pop"></p>
+        <div class="spell" data-el="spell"></div>
       </div>
       <div class="play-dock">
-        <div class="current" data-el="current"></div>
+        <div class="rack" data-el="rack"></div>
         <button class="btn btn-primary" type="button" data-act="submit" style="width:100%">Send it</button>
         <div class="scoreline">
           <span data-el="tally">0 words</span>
@@ -525,10 +525,11 @@ function showAnagramsPlay(run: IssuedRun) {
   `
 
   const clockEl = root.querySelector<HTMLElement>('[data-el="clock"]')!
-  const currentEl = root.querySelector<HTMLElement>('[data-el="current"]')!
+  const spellEl = root.querySelector<HTMLElement>('[data-el="spell"]')!
   const rackEl = root.querySelector<HTMLElement>('[data-el="rack"]')!
   const foundEl = root.querySelector<HTMLElement>('[data-el="found"]')!
   const tallyEl = root.querySelector<HTMLElement>('[data-el="tally"]')!
+  const sendBtn = root.querySelector<HTMLButtonElement>('[data-act="submit"]')!
 
   function currentWord() {
     return picked.map((i) => rack[i] ?? '').join('')
@@ -538,16 +539,17 @@ function showAnagramsPlay(run: IssuedRun) {
     rackEl.innerHTML = rack
       .map(
         (letter, i) =>
-          `<button type="button" data-i="${i}" class="${picked.includes(i) ? 'on' : ''}" ${picked.includes(i) ? 'disabled' : ''}>${escapeHtml(letter)}</button>`,
+          `<button type="button" data-i="${i}" class="${picked.includes(i) ? 'on' : ''}" ${picked.includes(i) || locked ? 'disabled' : ''}>${escapeHtml(letter)}</button>`,
       )
       .join('')
     rackEl.querySelectorAll<HTMLButtonElement>('button').forEach((btn) => {
       btn.addEventListener('click', () => {
         const i = Number(btn.dataset.i)
-        if (!Number.isInteger(i) || picked.includes(i)) return
+        if (locked || !Number.isInteger(i) || picked.includes(i)) return
         picked.push(i)
         status = 'idle'
-        paint()
+        paintSpell()
+        paintRack()
       })
     })
   }
@@ -560,55 +562,66 @@ function showAnagramsPlay(run: IssuedRun) {
     tallyEl.textContent = `${found.size} word${found.size === 1 ? '' : 's'}`
   }
 
-  function paint() {
-    currentEl.classList.toggle('good', status === 'good')
-    currentEl.classList.toggle('bad', status === 'bad')
-    currentEl.classList.toggle('already', status === 'already')
-    if (status === 'good' || status === 'bad' || status === 'already') currentEl.textContent = statusWord
-    else currentEl.textContent = currentWord()
+  function paintSpell(pts?: number) {
+    const word = currentWord()
+    spellEl.classList.remove('good', 'bad', 'already')
+    void spellEl.offsetWidth
+    if (status !== 'idle') spellEl.classList.add(status)
+    const extra = status === 'good' && pts ? `<span class="spell-pts">+${pts}</span>` : ''
+    spellEl.innerHTML =
+      [...word]
+        .map(
+          (ch, i) =>
+            `<span class="spell-letter${status === 'idle' && i === word.length - 1 ? ' in' : ''}">${escapeHtml(ch)}</span>`,
+        )
+        .join('') + extra
+  }
+
+  function resolveWord(kind: 'good' | 'bad' | 'already', pts?: number) {
+    locked = true
+    status = kind
+    paintSpell(pts)
     paintRack()
     paintFound()
+    sendBtn.disabled = true
+    if (clearTimer !== null) window.clearTimeout(clearTimer)
+    clearTimer = window.setTimeout(() => {
+      picked.length = 0
+      status = 'idle'
+      locked = false
+      sendBtn.disabled = false
+      paintSpell()
+      paintRack()
+      clearTimer = null
+    }, 520)
   }
 
   function submitWord() {
+    if (locked) return
     const cells = [...picked]
     const word = currentWord()
-    picked.length = 0
-    if (word.length < 3) {
-      status = 'idle'
-      statusWord = ''
-      paint()
-      return
-    }
+    if (word.length < 3) return
     const at = Date.now() - run.startTs
     if (!hasWord(dict!, word)) {
-      status = 'bad'
-      statusWord = word
-      paint()
-      flashPop('bad', word)
+      resolveWord('bad')
       vibrate(12)
       return
     }
     if (found.has(word)) {
-      status = 'already'
-      statusWord = 'Already in'
-      paint()
-      flashPop('already', 'Already in')
+      resolveWord('already')
       vibrate(10)
       return
     }
     inputs.push({ t: Math.max(0, at), cells, word })
     found.add(word)
-    const pts = pointsForLength(word.length)
-    status = 'good'
-    statusWord = word
-    paint()
-    flashPop('good', `+${pts}`)
+    resolveWord('good', pointsForLength(word.length))
     vibrate(8)
   }
 
-  paint()
-  root.querySelector('[data-act="submit"]')?.addEventListener('click', submitWord)
+  paintSpell()
+  paintRack()
+  paintFound()
+  sendBtn.addEventListener('click', submitWord)
   root.querySelector('[data-act="quit"]')?.addEventListener('click', () => {
     if (run.mode === 'daily' || run.mode === 'versus') {
       void finish(run, inputs)
@@ -634,6 +647,7 @@ function showAnagramsPlay(run: IssuedRun) {
   async function finish(issued: IssuedRun, log: InputEvent[]) {
     if (submitting) return
     submitting = true
+    if (clearTimer !== null) window.clearTimeout(clearTimer)
     teardownPlay()
     root.innerHTML = `<p class="kicker">Checking your words…</p>`
     try {
