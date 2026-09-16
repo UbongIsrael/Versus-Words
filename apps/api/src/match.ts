@@ -1,4 +1,4 @@
-import { versusScores, type InputEvent } from '@versus/sim'
+import { pointsForAnagramLength, versusScores, type InputEvent } from '@versus/sim'
 import { normalizeWalletAddress } from './nimiq.ts'
 import { newId, newSeedHex } from './token.ts'
 
@@ -456,7 +456,8 @@ function roundPoints(match: Match): { scoreA: number; scoreB: number } {
   if ((match.scoreMode ?? 'unique') === 'count') {
     return { scoreA: match.challenger.words.length, scoreB: match.opponent.words.length }
   }
-  const result = versusScores(match.challenger.words, match.opponent.words)
+  const points = currentGame(match) === 'anagrams' ? pointsForAnagramLength : undefined
+  const result = versusScores(match.challenger.words, match.opponent.words, points)
   return { scoreA: result.scoreA, scoreB: result.scoreB }
 }
 
@@ -496,7 +497,8 @@ export function settleFromScores(match: Match): Match {
     scoreA = match.challenger.words.length
     scoreB = match.opponent.words.length
   } else {
-    const result = versusScores(match.challenger.words, match.opponent.words)
+    const points = currentGame(match) === 'anagrams' ? pointsForAnagramLength : undefined
+    const result = versusScores(match.challenger.words, match.opponent.words, points)
     scoreA = result.scoreA
     scoreB = result.scoreB
   }
@@ -597,7 +599,8 @@ export function publicMatch(match: Match, viewer?: string | null) {
 
 function overlayView(match: Match) {
   if (!match.opponent || (!bothScored(match) && !isSettled(match))) return null
-  const raw = versusScores(match.challenger.words ?? [], match.opponent.words ?? [])
+  const points = currentGame(match) === 'anagrams' ? pointsForAnagramLength : undefined
+  const raw = versusScores(match.challenger.words ?? [], match.opponent.words ?? [], points)
   return {
     ...raw,
     scoreA: match.challenger.uniqueScore ?? raw.scoreA,

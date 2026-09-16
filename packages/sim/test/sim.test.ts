@@ -10,6 +10,7 @@ import {
   parseDictionary,
   parseSeedHex,
   pickAnagramSource,
+  pointsForAnagramLength,
   pointsForLength,
   RUN_DURATION_MS,
   seedToHex,
@@ -89,6 +90,17 @@ describe('score', () => {
     expect(pointsForLength(6)).toBe(3)
     expect(pointsForLength(7)).toBe(5)
     expect(pointsForLength(8)).toBe(11)
+  })
+
+  it('scores anagrams by length: 3=1, 4=2, 5=3', () => {
+    expect(pointsForAnagramLength(3)).toBe(1)
+    expect(pointsForAnagramLength(4)).toBe(2)
+    expect(pointsForAnagramLength(5)).toBe(3)
+    expect(pointsForAnagramLength(6)).toBe(4)
+    expect(pointsForAnagramLength(7)).toBe(5)
+    const vs = versusScores(['SET', 'REST', 'STEEL'], ['SET', 'LET'], pointsForAnagramLength)
+    expect(vs.scoreA).toBe(2 + 3)
+    expect(vs.scoreB).toBe(1)
   })
 
   it('zeros shared words in VS', () => {

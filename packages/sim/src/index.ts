@@ -13,7 +13,13 @@ export {
   type Cell,
 } from './grid.ts'
 export { MIN_WORD_LENGTH, wordFromPath, extendPath, type PathError, type PathResult } from './path.ts'
-export { pointsForLength, scoreWords, versusScores } from './score.ts'
+export {
+  pointsForLength,
+  pointsForAnagramLength,
+  scoreWords,
+  scoreAnagramWords,
+  versusScores,
+} from './score.ts'
 export { parseDictionary, hasWord, type Dictionary } from './dictionary.ts'
 export {
   RUN_DURATION_MS,

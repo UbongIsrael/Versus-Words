@@ -3,7 +3,9 @@ import {
   hasWord,
   parseDictionary,
   pickAnagramSource,
+  pointsForAnagramLength,
   pointsForLength,
+  scoreAnagramWords,
   wordFromPath,
   type Dictionary,
   type InputEvent,
@@ -650,7 +652,7 @@ function showAnagramsPlay(run: IssuedRun) {
       .sort()
       .map((word) => `<span class="chip">${escapeHtml(word)}</span>`)
       .join('')
-    tallyEl.textContent = `${found.size} word${found.size === 1 ? '' : 's'}`
+    tallyEl.textContent = `${found.size} word${found.size === 1 ? '' : 's'} · ${scoreAnagramWords(found)} pts`
   }
 
   function paintSpell(pts?: number) {
@@ -705,7 +707,7 @@ function showAnagramsPlay(run: IssuedRun) {
     }
     inputs.push({ t: Math.max(0, at), cells, word })
     found.add(word)
-    resolveWord('good', pointsForLength(word.length))
+    resolveWord('good', pointsForAnagramLength(word.length))
     vibrate(8)
   }
 

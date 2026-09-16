@@ -1,5 +1,5 @@
 import { parseSeedHex, rngFromSeed, shuffleInPlace } from './rng.ts'
-import { pointsForLength, scoreWords } from './score.ts'
+import { pointsForAnagramLength, scoreAnagramWords } from './score.ts'
 import { hasWord, type Dictionary } from './dictionary.ts'
 import { RUN_DURATION_MS, type InputEvent, type RejectedInput, type VerifyErr, type VerifyOk } from './verify.ts'
 
@@ -96,9 +96,9 @@ export function verifyAnagrams(
       rejected.push({ index: i, reason: 'not-a-word' })
       continue
     }
-    if (!found.has(word)) found.set(word, pointsForLength(word.length))
+    if (!found.has(word)) found.set(word, pointsForAnagramLength(word.length))
   }
 
   const words = [...found.keys()].sort()
-  return { ok: true, score: scoreWords(words), words, rejected }
+  return { ok: true, score: scoreAnagramWords(words), words, rejected }
 }
