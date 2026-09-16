@@ -64,8 +64,11 @@ boot()
 
 async function boot() {
   root.innerHTML = `
-    <p class="wordmark">Versus Word</p>
-    <p class="kicker">Getting ready…</p>
+    <div class="home-brand" style="padding-top:28vh">
+      <img class="home-logo" src="/logo.jpg" alt="" />
+      <p class="wordmark">Versus Word</p>
+      <p class="kicker">Getting ready…</p>
+    </div>
   `
   try {
     const [text] = await Promise.all([loadDictionary(), api.health()])
@@ -88,8 +91,11 @@ async function boot() {
     await showHome()
   } catch (err) {
     root.innerHTML = `
-      <p class="wordmark">Versus Word</p>
-      <p class="kicker">Can’t reach the game right now.</p>
+      <div class="home-brand" style="padding-top:28vh">
+        <img class="home-logo" src="/logo.jpg" alt="" />
+        <p class="wordmark">Versus Word</p>
+        <p class="kicker">Can’t reach the game right now.</p>
+      </div>
     `
     console.error(err)
   }
@@ -101,42 +107,39 @@ async function showHome() {
   const pay = session ? true : await isPayAvailable()
 
   root.innerHTML = `
-    <header>
-      <h1 class="wordmark">Versus Word</h1>
-      <p class="kicker">Two games. One clock. Challenge a friend.</p>
-    </header>
-    <div class="stack">
-      <section class="card">
+    <div class="home">
+      <div class="home-brand">
+        <img class="home-logo" src="/logo.jpg" alt="Versus Word" />
+        <h1 class="wordmark">Versus Word</h1>
+        <p class="kicker">Two games. One clock.</p>
+      </div>
+      <div class="game-grid">
+        <button class="poster" type="button" data-game="trace">
+          <img src="/game-trace.jpg" alt="" />
+          <span>Trace</span>
+        </button>
+        <button class="poster" type="button" data-game="anagrams">
+          <img src="/game-anagrams.jpg" alt="" />
+          <span>Anagrams</span>
+        </button>
+      </div>
+      <div class="home-actions">
         ${
           session
-            ? `<div class="mode-tag">Nimiq Pay</div>
-               <p class="kicker" style="margin-top:8px">${escapeHtml(session.label)}</p>
-               <button class="back" type="button" data-act="disconnect" style="margin-top:10px">Disconnect</button>`
+            ? `<button class="btn btn-primary" data-act="challenge">Challenge someone</button>
+               <button class="btn btn-ghost" data-act="join-code">I have a code</button>
+               <button class="btn btn-ghost" data-act="claims">Rewards</button>`
             : pay
-              ? `<div class="mode-tag">Nimiq Pay</div>
-                 <p class="kicker" style="margin-top:8px">Connect to play for keeps.</p>
-                 <button class="btn btn-primary" data-act="connect" style="margin-top:12px;width:100%">Connect wallet</button>`
-              : `<div class="mode-tag">Guest</div>
-                 <p class="kicker" style="margin-top:8px">Open this in Nimiq Pay to play with your wallet.</p>`
+              ? `<button class="btn btn-primary" data-act="connect">Connect to play</button>`
+              : `<p class="kicker" style="text-align:center">Open this in Nimiq Pay to play with your wallet.</p>`
         }
-      </section>
-      <div class="game-grid">
-        <button class="game-card" type="button" data-game="trace">
-          <div class="mode-tag">Game</div>
-          <h2>Trace</h2>
-          <p>${escapeHtml(GAME_META.trace.blurb)}</p>
-        </button>
-        <button class="game-card" type="button" data-game="anagrams">
-          <div class="mode-tag">Game</div>
-          <h2>Anagrams</h2>
-          <p>${escapeHtml(GAME_META.anagrams.blurb)}</p>
-        </button>
       </div>
       ${
         session
-          ? `<button class="btn btn-primary" data-act="challenge">Challenge someone</button>
-             <button class="btn btn-ghost" data-act="join-code">I have a code</button>
-             <button class="btn btn-ghost" data-act="claims">Rewards</button>`
+          ? `<div class="wallet-chip">
+               <span>${escapeHtml(session.label)}</span>
+               <button type="button" data-act="disconnect">Disconnect</button>
+             </div>`
           : ''
       }
     </div>
@@ -272,13 +275,17 @@ async function showGameHub(game: GameKind) {
     return
   }
 
+  const art = game === 'anagrams' ? '/game-anagrams.jpg' : '/game-trace.jpg'
   root.innerHTML = `
-    <button class="back" type="button" data-act="home">Back</button>
-    <header>
-      <h1 class="wordmark">${escapeHtml(meta.title)}</h1>
-      <p class="kicker">${escapeHtml(meta.blurb)}</p>
-    </header>
-    <div class="stack">
+    <div class="hub">
+      <button class="back" type="button" data-act="home">Back</button>
+      <div class="hub-hero">
+        <img src="${art}" alt="" />
+        <div class="hub-hero-copy">
+          <h1>${escapeHtml(meta.title)}</h1>
+          <p>${escapeHtml(meta.blurb)}</p>
+        </div>
+      </div>
       <button class="btn btn-primary" data-act="free">Practice</button>
       <button class="btn btn-ghost" data-act="daily" ${daily.played ? 'disabled' : ''}>
         ${daily.played ? `You’re done · ${daily.score} pts` : 'Today’s challenge'}
