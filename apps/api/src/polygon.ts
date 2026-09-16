@@ -17,6 +17,9 @@ export const USDT_ESCROW = (process.env.USDT_ESCROW ?? '').toLowerCase()
 export const POLYGON_RPC = process.env.POLYGON_RPC ?? 'https://polygon-bor-rpc.publicnode.com'
 const ORACLE_KEY = (process.env.POLYGON_ORACLE_KEY ?? '').replace(/^0x/, '')
 
+/** Expired pots from the first rooms. Public RPCs prune Locked logs, so Rewards still has the ids. */
+export const KNOWN_ESCROW_POTS = ['c3985be85f76c6b1', 'a762398fd18377c7']
+
 export function usdtEscrowConfigured(): boolean {
   return /^0x[0-9a-f]{40}$/.test(USDT_ESCROW)
 }
@@ -40,7 +43,7 @@ const ZERO = '0x0000000000000000000000000000000000000000'
 /** Open VersusEscrow pots this EVM address locked into (Locked logs + pot reads). */
 export async function listOpenPotsForPlayer(evm: string, extraIds: string[] = []) {
   const addr = evm.toLowerCase()
-  const ids = new Set(extraIds.filter(Boolean))
+  const ids = new Set([...KNOWN_ESCROW_POTS, ...extraIds].filter(Boolean))
   try {
     for (const log of await lockedLogsForPlayer(addr)) {
       const id = idFromIndexedTopic(log.topics[1] ?? '')
@@ -68,7 +71,7 @@ async function lockedLogsForPlayer(evm: string) {
   const latestHex = await ethRpc('eth_blockNumber', [])
   const latest = Number.parseInt(String(latestHex), 16)
   if (!Number.isFinite(latest)) return []
-  const fromBlock = Math.max(0, latest - 250_000)
+  const fromBlock = Math.max(0, latest - 9_999)
   const logs = await ethRpc('eth_getLogs', [
     {
       address: USDT_ESCROW,

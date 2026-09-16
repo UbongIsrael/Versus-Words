@@ -280,11 +280,9 @@ export function payoutFor(match: Match, address: string): Payout | null {
   return match.payouts.find((p) => p.to === wallet) ?? null
 }
 
-export function keepForClaim(match: Match, now = Date.now()): boolean {
-  if ((match.asset ?? 'NIM') !== 'USDT') return false
-  if (!isSettled(match) || match.claimedOnChain) return false
-  const closedAt = match.closedAt ?? match.settledAt ?? match.createdAt
-  return now - closedAt < CLAIM_KEEP_MS
+export function keepForClaim(match: Match, _now = Date.now()): boolean {
+  if ((match.asset ?? 'NIM') !== 'USDT' || match.claimedOnChain) return false
+  return Boolean(match.challenger.funded || match.opponent?.funded)
 }
 
 export function canViewerClaim(match: Match, address: string, now = Date.now()): boolean {

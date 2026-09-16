@@ -27,7 +27,7 @@ import {
 import { isGuestId, normalizeWalletAddress } from './nimiq.ts'
 import { createMatchStore } from './persist.ts'
 import type { Store } from './store.ts'
-import { oracleAddress, playerDeposited, readPot, listOpenPotsForPlayer, signSettle, winnerCode, USDT_ESCROW, USDT_TOKEN, POLYGON_CHAIN_ID, usdtEscrowConfigured } from './polygon.ts'
+import { oracleAddress, playerDeposited, readPot, listOpenPotsForPlayer, KNOWN_ESCROW_POTS, signSettle, winnerCode, USDT_ESCROW, USDT_TOKEN, POLYGON_CHAIN_ID, usdtEscrowConfigured } from './polygon.ts'
 import { newId, signRun } from './token.ts'
 
 type PlayerFn = (c: { req: { header: (n: string) => string | undefined; query: (n: string) => string | undefined } }) =>
@@ -156,9 +156,10 @@ export async function attachMatchRoutes(
   app.get('/api/claims', async (c) => {
     const evm = (c.req.query('evm') ?? '').trim().toLowerCase()
     if (!/^0x[0-9a-f]{40}$/.test(evm)) return c.json({ error: 'evm-required' }, 400)
-    const extraIds = [...matches.values()]
-      .filter((m) => (m.asset ?? 'NIM') === 'USDT' && (m.challenger.evmAddress === evm || m.opponent?.evmAddress === evm))
-      .map((m) => m.id)
+    const extraIds = [
+      ...KNOWN_ESCROW_POTS,
+      ...[...matches.values()].filter((m) => (m.asset ?? 'NIM') === 'USDT').map((m) => m.id),
+    ]
     const open = fakeChain()
       ? extraIds.flatMap((id) => {
           const match = matches.get(id)
@@ -174,13 +175,14 @@ export async function attachMatchRoutes(
       if (!gameOver && !expired) return []
       const wallet = walletOf(c)
       const payout = match && wallet ? payoutFor(match, wallet) : null
+      const action = gameOver ? 'settle' : 'timeout'
       const units = Number(pot.amount)
-      const amount = (units / 1_000_000) * (payout?.kind === 'win' ? 2 : 1)
+      const amount = (units / 1_000_000) * (action === 'settle' && payout?.kind === 'win' ? 2 : 1)
       return [
         {
           matchId: match?.id ?? id,
           amount,
-          action: gameOver ? 'settle' : 'timeout',
+          action,
         },
       ]
     })

@@ -217,9 +217,11 @@ async function showClaims() {
               .map(
                 (row) => `
             <section class="card">
-              <div class="mode-tag">Pending</div>
+              <div class="mode-tag">${row.action === 'timeout' ? 'Expired pot' : 'Pending'}</div>
               <h2 style="font-size:32px;margin:8px 0 4px">${escapeHtml(formatAmount(row.amount))} USDT</h2>
-              <button class="btn btn-primary" data-act="claim" data-id="${escapeHtml(row.matchId)}" data-action="${row.action}" style="width:100%;margin-top:12px">Claim</button>
+              <button class="btn btn-primary" data-act="claim" data-id="${escapeHtml(row.matchId)}" data-action="${row.action}" style="width:100%;margin-top:12px">${
+                row.action === 'timeout' ? 'Refund stake' : 'Claim'
+              }</button>
             </section>`,
               )
               .join('')
@@ -237,7 +239,7 @@ async function showClaims() {
       btn.textContent = 'Claiming…'
       void claimUsdt(id, () => showClaims(), action).finally(() => {
         btn.disabled = false
-        btn.textContent = 'Claim'
+        btn.textContent = action === 'timeout' ? 'Refund stake' : 'Claim'
       })
     })
   })
