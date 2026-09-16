@@ -128,11 +128,99 @@ button,
   color: var(--mute);
 }
 
+.play-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - 44px - env(safe-area-inset-bottom, 0px));
+  position: relative;
+}
+
 .play-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
+}
+
+.play-stage {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 180px;
+}
+
+.play-dock {
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.pop {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  z-index: 2;
+  margin: 0;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 44px;
+  font-weight: 620;
+  letter-spacing: -0.03em;
+  opacity: 0;
+  text-shadow: 0 8px 24px rgba(243, 235, 221, 0.9);
+}
+
+.pop.show.good {
+  color: var(--good);
+  animation: pop-float 0.7s ease-out;
+}
+
+.pop.show.already {
+  color: var(--accent);
+  animation: pop-float 0.7s ease-out;
+}
+
+.pop.show.bad {
+  color: var(--bad);
+  animation: pop-shake 0.55s ease-out;
+}
+
+@keyframes pop-float {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -30%) scale(0.55);
+  }
+  22% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.14);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -78%) scale(1);
+  }
+}
+
+@keyframes pop-shake {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.7);
+  }
+  18% {
+    opacity: 1;
+    transform: translate(-42%, -50%) scale(1.08);
+  }
+  36% {
+    transform: translate(-58%, -50%) scale(1.08);
+  }
+  54% {
+    transform: translate(-46%, -50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.96);
+  }
 }
 
 .clock {
@@ -170,6 +258,10 @@ button,
   color: var(--good);
 }
 
+.current.already {
+  color: var(--accent);
+}
+
 .grid-wrap {
   touch-action: none;
   user-select: none;
@@ -201,6 +293,21 @@ button,
   padding: 5px 10px;
   font-size: 12px;
   letter-spacing: 0.04em;
+}
+
+.chip.fresh {
+  animation: chip-in 0.35s ease-out;
+}
+
+@keyframes chip-in {
+  from {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .scoreline {
@@ -327,8 +434,10 @@ input.code {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
-  margin: 8px 0 16px;
+  align-content: center;
+  gap: 10px;
+  margin: 0;
+  flex: 1;
 }
 
 .rack button {

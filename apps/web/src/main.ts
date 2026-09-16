@@ -50,11 +50,11 @@ let activeGame: GameKind = 'trace'
 const GAME_META: Record<GameKind, { title: string; blurb: string }> = {
   trace: {
     title: 'Trace',
-    blurb: 'Finger a path on a 4×4 grid. Adjacent letters, 90 seconds.',
+    blurb: 'Draw words. Beat the clock.',
   },
   anagrams: {
     title: 'Anagrams',
-    blurb: 'A real seven-letter word, scattered. Make shorter words. Longer scores more.',
+    blurb: 'Find the most words. Win.',
   },
 }
 
@@ -63,7 +63,7 @@ boot()
 async function boot() {
   root.innerHTML = `
     <p class="wordmark">Versus Word</p>
-    <p class="kicker">Loading the word list…</p>
+    <p class="kicker">Getting ready…</p>
   `
   try {
     const [text] = await Promise.all([loadDictionary(), api.health()])
@@ -87,7 +87,7 @@ async function boot() {
   } catch (err) {
     root.innerHTML = `
       <p class="wordmark">Versus Word</p>
-      <p class="kicker">Could not reach the server. Start it with <code>npm run dev</code>.</p>
+      <p class="kicker">Can’t reach the game right now.</p>
     `
     console.error(err)
   }
@@ -101,7 +101,7 @@ async function showHome() {
   root.innerHTML = `
     <header>
       <h1 class="wordmark">Versus Word</h1>
-      <p class="kicker">Pick a game. Same rooms, same stakes. The server keeps score.</p>
+      <p class="kicker">Two games. One clock. Challenge a friend.</p>
     </header>
     <div class="stack">
       <section class="card">
@@ -112,10 +112,10 @@ async function showHome() {
                <button class="back" type="button" data-act="disconnect" style="margin-top:10px">Disconnect</button>`
             : pay
               ? `<div class="mode-tag">Nimiq Pay</div>
-                 <p class="kicker" style="margin-top:8px">Sign in so the daily board is your wallet, not this phone.</p>
+                 <p class="kicker" style="margin-top:8px">Connect to play for keeps.</p>
                  <button class="btn btn-primary" data-act="connect" style="margin-top:12px;width:100%">Connect wallet</button>`
               : `<div class="mode-tag">Guest</div>
-                 <p class="kicker" style="margin-top:8px">Playing in a browser. Open this URL inside Nimiq Pay to connect a wallet.</p>`
+                 <p class="kicker" style="margin-top:8px">Open this in Nimiq Pay to play with your wallet.</p>`
         }
       </section>
       <div class="game-grid">
@@ -132,8 +132,8 @@ async function showHome() {
       </div>
       ${
         session
-          ? `<button class="btn btn-primary" data-act="challenge">New versus room</button>
-             <button class="btn btn-ghost" data-act="join-code">Join with a code</button>
+          ? `<button class="btn btn-primary" data-act="challenge">Challenge someone</button>
+             <button class="btn btn-ghost" data-act="join-code">I have a code</button>
              <button class="btn btn-ghost" data-act="claims">Rewards</button>`
           : ''
       }
@@ -160,7 +160,7 @@ async function showHome() {
 }
 
 async function connectWallet() {
-  root.innerHTML = `<p class="kicker">Waiting on Nimiq Pay…</p>`
+  root.innerHTML = `<p class="kicker">Opening your wallet…</p>`
   try {
     const address = await listPayAddress()
     const challenge = await api.challenge(address)
@@ -189,14 +189,14 @@ async function showClaims() {
     history.replaceState({}, '', '/')
     void showHome()
   }
-  root.innerHTML = `<p class="kicker">Checking the contract for pending claims…</p>`
+  root.innerHTML = `<p class="kicker">Looking for money you left behind…</p>`
   let rows: ClaimRow[]
   try {
     const evm = (await peekEvmAddress()) ?? (await resolveEvmAddress())
     if (!evm) {
       root.innerHTML = `
         <button class="back" type="button" data-act="home">Back</button>
-        <p class="kicker">No Polygon wallet on this phone.</p>
+        <p class="kicker">No wallet on this phone to collect with.</p>
       `
       root.querySelector('[data-act="home"]')?.addEventListener('click', goHome)
       return
@@ -213,7 +213,7 @@ async function showClaims() {
 
   root.innerHTML = `
     <button class="back" type="button" data-act="home">Back</button>
-    <h1 class="wordmark">Rewards</h1>
+    <h1 class="wordmark">Your money</h1>
     <div class="stack" style="margin-top:22px">
       ${
         rows.length
@@ -221,15 +221,15 @@ async function showClaims() {
               .map(
                 (row) => `
             <section class="card">
-              <div class="mode-tag">${row.action === 'timeout' ? 'Expired pot' : 'Pending'}</div>
+              <div class="mode-tag">${row.action === 'timeout' ? 'Your stake' : 'Winnings'}</div>
               <h2 style="font-size:32px;margin:8px 0 4px">${escapeHtml(formatAmount(row.amount))} USDT</h2>
               <button class="btn btn-primary" data-act="claim" data-id="${escapeHtml(row.matchId)}" data-action="${row.action}" style="width:100%;margin-top:12px">${
-                row.action === 'timeout' ? 'Refund stake' : 'Claim'
+                row.action === 'timeout' ? 'Get it back' : 'Collect'
               }</button>
             </section>`,
               )
               .join('')
-          : `<section class="card"><p class="kicker">No pending claims.</p></section>`
+          : `<section class="card"><p class="kicker">Nothing waiting.</p></section>`
       }
     </div>
   `
@@ -240,19 +240,19 @@ async function showClaims() {
       if (!id) return
       const action = btn.dataset.action === 'timeout' ? 'timeout' : 'settle'
       btn.disabled = true
-      btn.textContent = 'Claiming…'
+      btn.textContent = 'Working…'
       void claimUsdt(id, () => showClaims(), action).finally(() => {
         btn.disabled = false
-        btn.textContent = action === 'timeout' ? 'Refund stake' : 'Claim'
+        btn.textContent = action === 'timeout' ? 'Get it back' : 'Collect'
       })
     })
   })
 }
 
 function humanConnectError(code: string): string {
-  if (code === 'not-in-pay') return 'Open this app inside Nimiq Pay, then connect.'
-  if (code === 'no-account') return 'No Nimiq account in Pay.'
-  if (code === 'PermissionDeniedError' || /denied|reject/i.test(code)) return 'Signature was cancelled.'
+  if (code === 'not-in-pay') return 'Open this in Nimiq Pay, then try again.'
+  if (code === 'no-account') return 'No wallet found in Pay.'
+  if (code === 'PermissionDeniedError' || /denied|reject/i.test(code)) return 'You cancelled the sign-in.'
   return code
 }
 
@@ -266,7 +266,7 @@ async function showGameHub(game: GameKind) {
   try {
     ;[daily, board] = await Promise.all([api.daily(game), api.leaderboard(game)])
   } catch {
-    root.innerHTML = `<p class="kicker">API is down.</p>`
+    root.innerHTML = `<p class="kicker">Can’t reach the game right now.</p>`
     return
   }
 
@@ -277,13 +277,13 @@ async function showGameHub(game: GameKind) {
       <p class="kicker">${escapeHtml(meta.blurb)}</p>
     </header>
     <div class="stack">
-      <button class="btn btn-primary" data-act="free">Free run</button>
+      <button class="btn btn-primary" data-act="free">Practice</button>
       <button class="btn btn-ghost" data-act="daily" ${daily.played ? 'disabled' : ''}>
-        ${daily.played ? `Daily done · ${daily.score} pts` : 'Play today’s board'}
+        ${daily.played ? `You’re done · ${daily.score} pts` : 'Today’s challenge'}
       </button>
-      ${session ? `<button class="btn btn-ghost" data-act="challenge">New versus room</button>` : ''}
+      ${session ? `<button class="btn btn-ghost" data-act="challenge">Challenge someone</button>` : ''}
       <section class="card">
-        <div class="mode-tag">${daily.date} · daily</div>
+        <div class="mode-tag">${daily.date}</div>
         ${
           board.entries.length
             ? `<ol class="board-list">${board.entries
@@ -292,7 +292,7 @@ async function showGameHub(game: GameKind) {
                     `<li><span>${i + 1}. ${escapeHtml(row.label)}</span><span class="muted">${row.score} · ${row.wordCount} words</span></li>`,
                 )
                 .join('')}</ol>`
-            : `<p class="kicker">No verified scores yet. Be first.</p>`
+            : `<p class="kicker">Nobody’s on the board yet.</p>`
         }
       </section>
     </div>
@@ -336,22 +336,27 @@ function showPlay(run: IssuedRun) {
   const inputs: InputEvent[] = []
   const found = new Set<string>()
   let livePath: number[] = []
-  let status: 'idle' | 'good' | 'bad' = 'idle'
+  let status: 'idle' | 'good' | 'bad' | 'already' = 'idle'
   let statusWord = ''
   let submitting = false
 
   root.innerHTML = `
-    <div class="play-head" data-play="1">
-      <button class="back" type="button" data-act="quit">Quit</button>
-      <div class="mode-tag">${run.mode === 'daily' ? 'Daily' : run.mode === 'versus' ? 'Versus' : 'Free run'}</div>
-      <div class="clock" data-el="clock">1:30</div>
-    </div>
-    <div class="current" data-el="current"></div>
-    <div class="grid-wrap" data-el="grid"></div>
-    <div class="found" data-el="found"></div>
-    <div class="scoreline">
-      <span data-el="tally">0 words</span>
-      <span>Score is official after the clock.</span>
+    <div class="play-screen" data-play="1">
+      <div class="play-head">
+        <button class="back" type="button" data-act="quit">Quit</button>
+        <div class="mode-tag">${run.mode === 'daily' ? 'Today' : run.mode === 'versus' ? 'Versus' : 'Practice'}</div>
+        <div class="clock" data-el="clock">1:30</div>
+      </div>
+      <div class="current" data-el="current"></div>
+      <div class="play-stage">
+        <div class="grid-wrap" data-el="grid"></div>
+        <p class="pop" data-el="pop"></p>
+      </div>
+      <div class="found" data-el="found"></div>
+      <div class="scoreline">
+        <span data-el="tally">0 words</span>
+        <span></span>
+      </div>
     </div>
   `
 
@@ -365,7 +370,8 @@ function showPlay(run: IssuedRun) {
     const preview = wordFromPath(cells, livePath)
     currentEl.classList.toggle('good', status === 'good')
     currentEl.classList.toggle('bad', status === 'bad')
-    if (status === 'good' || status === 'bad') currentEl.textContent = statusWord
+    currentEl.classList.toggle('already', status === 'already')
+    if (status === 'good' || status === 'bad' || status === 'already') currentEl.textContent = statusWord
     else currentEl.textContent = preview.ok ? preview.word : preview.error === 'empty' ? '' : '·'
   }
 
@@ -397,17 +403,26 @@ function showPlay(run: IssuedRun) {
         status = 'bad'
         statusWord = parsed.word
         paintStatus()
+        flashPop('bad', parsed.word)
         vibrate(12)
         return
       }
-      inputs.push({ t: Math.max(0, at), cells: path })
-      if (!found.has(parsed.word)) {
-        found.add(parsed.word)
-        paintFound()
+      if (found.has(parsed.word)) {
+        status = 'already'
+        statusWord = 'Already in'
+        paintStatus()
+        flashPop('already', 'Already in')
+        vibrate(10)
+        return
       }
+      inputs.push({ t: Math.max(0, at), cells: path })
+      found.add(parsed.word)
+      paintFound()
+      const pts = pointsForLength(parsed.word.length)
       status = 'good'
-      statusWord = `${parsed.word} +${pointsForLength(parsed.word.length)}`
+      statusWord = parsed.word
       paintStatus()
+      flashPop('good', `+${pts}`)
       vibrate(8)
     },
   })
@@ -438,7 +453,7 @@ function showPlay(run: IssuedRun) {
     if (submitting) return
     submitting = true
     teardownPlay()
-    root.innerHTML = `<p class="kicker">Server is walking your path…</p>`
+    root.innerHTML = `<p class="kicker">Checking your words…</p>`
     try {
       const result = await api.submit(issued, log)
       if (issued.matchId) {
@@ -458,13 +473,13 @@ function showPlay(run: IssuedRun) {
 function showResult(mode: string, score: number, words: string[]) {
   root.innerHTML = `
     <section class="result">
-      <div class="mode-tag">Verified · ${mode}</div>
+      <div class="mode-tag">${mode === 'daily' ? 'Today' : mode === 'versus' ? 'Versus' : 'Practice'}</div>
       <h2>${score}</h2>
-      <p>${words.length} word${words.length === 1 ? '' : 's'} the server accepted.</p>
+      <p>${words.length} word${words.length === 1 ? '' : 's'}.</p>
       <div class="words">${words.map((word) => `<span class="chip">${escapeHtml(word)}</span>`).join('')}</div>
       <div class="stack">
-        <button class="btn btn-primary" data-act="home">Back home</button>
-        ${mode === 'free' ? `<button class="btn btn-ghost" data-act="again">Another free run</button>` : ''}
+        <button class="btn btn-primary" data-act="home">Home</button>
+        ${mode === 'free' ? `<button class="btn btn-ghost" data-act="again">Play again</button>` : ''}
       </div>
     </section>
   `
@@ -482,23 +497,30 @@ function showAnagramsPlay(run: IssuedRun) {
   const inputs: InputEvent[] = []
   const found = new Set<string>()
   const picked: number[] = []
-  let status: 'idle' | 'good' | 'bad' = 'idle'
+  let status: 'idle' | 'good' | 'bad' | 'already' = 'idle'
   let statusWord = ''
   let submitting = false
 
   root.innerHTML = `
-    <div class="play-head" data-play="1">
-      <button class="back" type="button" data-act="quit">Quit</button>
-      <div class="mode-tag">${run.mode === 'daily' ? 'Daily' : run.mode === 'versus' ? 'Versus' : 'Free run'} · Anagrams</div>
-      <div class="clock" data-el="clock">1:30</div>
-    </div>
-    <div class="current" data-el="current"></div>
-    <div class="rack" data-el="rack"></div>
-    <button class="btn btn-primary" type="button" data-act="submit" style="width:100%">Submit word</button>
-    <div class="found" data-el="found"></div>
-    <div class="scoreline">
-      <span data-el="tally">0 words</span>
-      <span>Longer words score more.</span>
+    <div class="play-screen" data-play="1">
+      <div class="play-head">
+        <button class="back" type="button" data-act="quit">Quit</button>
+        <div class="mode-tag">${run.mode === 'daily' ? 'Today' : run.mode === 'versus' ? 'Versus' : 'Practice'} · Anagrams</div>
+        <div class="clock" data-el="clock">1:30</div>
+      </div>
+      <div class="found" data-el="found"></div>
+      <div class="play-stage">
+        <div class="rack" data-el="rack"></div>
+        <p class="pop" data-el="pop"></p>
+      </div>
+      <div class="play-dock">
+        <div class="current" data-el="current"></div>
+        <button class="btn btn-primary" type="button" data-act="submit" style="width:100%">Send it</button>
+        <div class="scoreline">
+          <span data-el="tally">0 words</span>
+          <span></span>
+        </div>
+      </div>
     </div>
   `
 
@@ -541,7 +563,8 @@ function showAnagramsPlay(run: IssuedRun) {
   function paint() {
     currentEl.classList.toggle('good', status === 'good')
     currentEl.classList.toggle('bad', status === 'bad')
-    if (status === 'good' || status === 'bad') currentEl.textContent = statusWord
+    currentEl.classList.toggle('already', status === 'already')
+    if (status === 'good' || status === 'bad' || status === 'already') currentEl.textContent = statusWord
     else currentEl.textContent = currentWord()
     paintRack()
     paintFound()
@@ -562,14 +585,25 @@ function showAnagramsPlay(run: IssuedRun) {
       status = 'bad'
       statusWord = word
       paint()
+      flashPop('bad', word)
       vibrate(12)
       return
     }
+    if (found.has(word)) {
+      status = 'already'
+      statusWord = 'Already in'
+      paint()
+      flashPop('already', 'Already in')
+      vibrate(10)
+      return
+    }
     inputs.push({ t: Math.max(0, at), cells, word })
-    if (!found.has(word)) found.add(word)
+    found.add(word)
+    const pts = pointsForLength(word.length)
     status = 'good'
-    statusWord = `${word} +${pointsForLength(word.length)}`
+    statusWord = word
     paint()
+    flashPop('good', `+${pts}`)
     vibrate(8)
   }
 
@@ -601,7 +635,7 @@ function showAnagramsPlay(run: IssuedRun) {
     if (submitting) return
     submitting = true
     teardownPlay()
-    root.innerHTML = `<p class="kicker">Server is checking your words…</p>`
+    root.innerHTML = `<p class="kicker">Checking your words…</p>`
     try {
       const result = await api.submit(issued, log)
       if (issued.matchId) {
@@ -625,7 +659,7 @@ async function showNewChallenge(preset?: GameKind[]) {
   root.innerHTML = `
     <button class="back" type="button" data-act="home">Back</button>
     <h1 class="wordmark">New room</h1>
-    <p class="kicker">Pick the games, then the stake. They join with a six-letter code.</p>
+    <p class="kicker">Invite someone. Winner takes the pot.</p>
     <form class="stack" style="margin-top:22px" data-el="form">
       <label class="field">
         <span>Games</span>
@@ -636,7 +670,7 @@ async function showNewChallenge(preset?: GameKind[]) {
       </label>
       <p class="note" data-el="games-hint"></p>
       <label class="field">
-        <span>Stake in</span>
+        <span>Play for</span>
         <div class="seg">
           <button type="button" class="on" data-asset="NIM">NIM</button>
           <button type="button" data-asset="USDT">USDT</button>
@@ -649,12 +683,12 @@ async function showNewChallenge(preset?: GameKind[]) {
       <label class="field">
         <span>How you win</span>
         <div class="seg">
-          <button type="button" class="on" data-mode="unique">Unique words</button>
+          <button type="button" class="on" data-mode="unique">Words they missed</button>
           <button type="button" data-mode="count">Most words</button>
         </div>
       </label>
-      <p class="note" data-el="hint">Shared words are worth 0. Highest unique score takes the pot.</p>
-      <button class="btn btn-primary" type="submit">Create room</button>
+      <p class="note" data-el="hint">Only words they didn’t find count.</p>
+      <button class="btn btn-primary" type="submit">Open room</button>
     </form>
   `
   const hint = root.querySelector<HTMLElement>('[data-el="hint"]')!
@@ -668,14 +702,14 @@ async function showNewChallenge(preset?: GameKind[]) {
     })
     gamesHint.textContent =
       selected.size > 1
-        ? 'You’ll play each selected game, 90 seconds each. Scores add up.'
+        ? 'You’ll play both. Scores add up.'
         : selected.has('anagrams')
-          ? 'Seven scattered letters. Make as many words as you can.'
-          : 'Same 4×4 grid for both of you.'
+          ? 'Same letters. Most words wins.'
+          : 'Same grid. Draw more words than they do.'
     hint.textContent =
       scoreMode === 'count'
-        ? 'Whoever finds more accepted words wins. Shared words still count.'
-        : 'Shared words are worth 0. Highest unique score takes the pot.'
+        ? 'Whoever finds more words wins.'
+        : 'Only words they didn’t find count.'
   }
   root.querySelector('[data-act="home"]')?.addEventListener('click', () => {
     history.replaceState({}, '', '/')
@@ -723,10 +757,10 @@ function showJoinCode() {
   root.innerHTML = `
     <button class="back" type="button" data-act="home">Back</button>
     <h1 class="wordmark">Join</h1>
-    <p class="kicker">Type the six-letter room code.</p>
+    <p class="kicker">Got a code?</p>
     <form class="stack" style="margin-top:22px" data-el="form">
       <input class="code" name="code" maxlength="8" autocapitalize="characters" autocomplete="off" placeholder="K7NP2Q" />
-      <button class="btn btn-primary" type="submit">Enter room</button>
+      <button class="btn btn-primary" type="submit">Let’s go</button>
     </form>
   `
   root.querySelector('[data-act="home"]')?.addEventListener('click', () => void showHome())
@@ -744,7 +778,7 @@ async function openByCode(code: string) {
     history.replaceState({}, '', `/?v=${match.id}`)
     await showMatch(match.id)
   } catch {
-    root.innerHTML = `<p class="kicker">No room for that code.</p><button class="btn btn-primary" data-act="again">Try again</button>`
+    root.innerHTML = `<p class="kicker">That code’s gone.</p><button class="btn btn-primary" data-act="again">Try again</button>`
     root.querySelector('[data-act="again"]')?.addEventListener('click', () => showJoinCode())
   }
 }
@@ -783,7 +817,7 @@ async function showMatch(id: string) {
     match = await fetchMatch(id)
   } catch {
     if (stillPlaying() || gen !== matchViewGen) return
-    root.innerHTML = `<p class="kicker">Match not found.</p><button class="btn btn-primary" data-act="home">Home</button>`
+    root.innerHTML = `<p class="kicker">This room’s gone.</p><button class="btn btn-primary" data-act="home">Home</button>`
     root.querySelector('[data-act="home"]')?.addEventListener('click', () => {
       history.replaceState({}, '', '/')
       void showHome()
@@ -874,12 +908,12 @@ function paintMatch(match: MatchView) {
   const game = match.game ?? games[match.round ?? 0] ?? 'trace'
   const round = match.round ?? 0
   const modeLabel = `${games.map((g) => GAME_META[g].title).join(' + ')} · ${
-    match.scoreMode === 'count' ? 'Most words' : 'Unique words'
+    match.scoreMode === 'count' ? 'Most words' : 'Words they missed'
   }`
   const playLabel =
     games.length > 1
-      ? `Play ${GAME_META[game].title} · round ${round + 1} of ${games.length}`
-      : `Play ${GAME_META[game].title} · 90 seconds`
+      ? `${GAME_META[game].title} · round ${round + 1} of ${games.length}`
+      : `Go — ${GAME_META[game].title}`
 
   root.innerHTML = `
     <div class="play-head" data-match-id="${escapeHtml(match.id)}">
@@ -887,25 +921,25 @@ function paintMatch(match: MatchView) {
       <div class="mode-tag">${escapeHtml(stakeLabel)} · ${modeLabel}</div>
     </div>
     <section class="card">
-      <div class="mode-tag">Room code</div>
+      <div class="mode-tag">Code</div>
       <p class="room-code">${escapeHtml(match.code)}</p>
       <p class="kicker" style="margin-top:8px">${
         match.scoreMode === 'count'
-          ? 'Most accepted words wins. Shared words still count.'
-          : 'Words you both find are worth 0. Highest unique score takes the pot.'
+          ? 'Whoever finds more words wins.'
+          : 'Only words they didn’t find count.'
       }</p>
       <ol class="board-list" style="margin-top:14px">
         <li><span>${escapeHtml(shortAddr(match.challenger.address))} · host</span><span class="muted">${seatState(match.challenger, match.scoreMode)}</span></li>
-        <li><span>${match.opponent ? escapeHtml(shortAddr(match.opponent.address)) : 'Waiting…'}</span><span class="muted">${match.opponent ? seatState(match.opponent, match.scoreMode) : 'empty seat'}</span></li>
+        <li><span>${match.opponent ? escapeHtml(shortAddr(match.opponent.address)) : 'Waiting…'}</span><span class="muted">${match.opponent ? seatState(match.opponent, match.scoreMode) : 'open'}</span></li>
       </ol>
     </section>
     <div class="stack" style="margin-top:16px">
-      ${youNeedWallet ? `<p class="note">Connect a wallet on the home screen, then enter this code.</p>` : ''}
-      ${canJoin ? `<button class="btn btn-primary" data-act="join">Sit down</button>` : ''}
-      ${canFund ? `<button class="btn btn-primary" data-act="fund">Stake ${escapeHtml(stakeLabel)}</button>` : ''}
+      ${youNeedWallet ? `<p class="note">Connect a wallet, then come back with this code.</p>` : ''}
+      ${canJoin ? `<button class="btn btn-primary" data-act="join">I’m in</button>` : ''}
+      ${canFund ? `<button class="btn btn-primary" data-act="fund">Put in ${escapeHtml(stakeLabel)}</button>` : ''}
       ${canPlay ? `<button class="btn btn-primary" data-act="play">${escapeHtml(playLabel)}</button>` : ''}
-      ${match.you?.scored && !match.settled ? `<p class="kicker">Waiting for the other trace.</p>` : ''}
-      <button class="btn btn-ghost" data-act="copy">Copy invite link</button>
+      ${match.you?.scored && !match.settled ? `<p class="kicker">Waiting on them…</p>` : ''}
+      <button class="btn btn-ghost" data-act="copy">Copy invite</button>
       ${match.settled ? settleBlock(match) : ''}
     </div>
   `
@@ -952,11 +986,11 @@ async function beginVersus(id: string) {
 }
 
 function closedCopy(reason: string | null) {
-  if (reason === 'idle-no-join') return 'Nobody joined. This room is closed — create a new one.'
-  if (reason === 'idle-no-play') return 'No game started. This room is closed — create a new one.'
-  if (reason === 'empty') return 'Everyone left. This room is closed — create a new one.'
-  if (reason === 'expired' || reason === 'settled') return 'This room is closed — create a new one.'
-  return 'This room is closed — create a new one.'
+  if (reason === 'idle-no-join') return 'Nobody showed. Start a new room.'
+  if (reason === 'idle-no-play') return 'Nobody started. Start a new room.'
+  if (reason === 'empty') return 'Everyone left. Start a new room.'
+  if (reason === 'expired' || reason === 'settled') return 'This one’s over. Start a new room.'
+  return 'This one’s over. Start a new room.'
 }
 
 async function claimUsdt(id: string, after?: () => void | Promise<void>, action: 'settle' | 'timeout' = 'settle') {
@@ -992,16 +1026,16 @@ async function claimUsdt(id: string, after?: () => void | Promise<void>, action:
 }
 
 function humanClaimError(code: string): string {
-  if (code === 'pot-missing') return 'That pot is gone on Polygon.'
-  if (code === 'not-settled') return 'The room has not finished yet.'
-  if (code === 'usdt-escrow-unconfigured') return 'USDT escrow is not configured.'
-  if (/denied|reject/i.test(code)) return 'Claim was cancelled.'
-  if (/settled|already/i.test(code)) return 'Already claimed.'
+  if (code === 'pot-missing') return 'Nothing left to collect.'
+  if (code === 'not-settled') return 'The round isn’t over yet.'
+  if (code === 'usdt-escrow-unconfigured') return 'Can’t collect right now.'
+  if (/denied|reject/i.test(code)) return 'You cancelled.'
+  if (/settled|already/i.test(code)) return 'Already collected.'
   return code
 }
 
 async function fundSeat(id: string) {
-  root.innerHTML = `<p class="kicker">Sending stake…</p>`
+  root.innerHTML = `<p class="kicker">Putting your stake in…</p>`
   try {
     const config = await api.config()
     const match = await api.getMatch(id)
@@ -1050,26 +1084,32 @@ async function fundSeat(id: string) {
 function settleBlock(match: MatchView): string {
   const overlay = match.overlay
   const title =
-    match.winner === 'tie' ? 'Tie · stakes back' : match.winner ? `Winner ${shortAddr(match.winner)}` : 'Settled'
+    match.winner === 'tie'
+      ? 'Tie — stakes back'
+      : match.winner && match.you && match.winner === match.you.address
+        ? 'You won'
+        : match.winner
+          ? `${shortAddr(match.winner)} won`
+          : 'Done'
   return `
     <section class="card">
-      <div class="mode-tag">Result</div>
+      <div class="mode-tag">Score</div>
       <h2 style="font-size:32px;margin:8px 0 4px">${escapeHtml(title)}</h2>
       ${
         overlay
-          ? `<p class="kicker">${overlay.scoreA} – ${overlay.scoreB} ${match.scoreMode === 'count' ? 'words' : 'unique'}</p>
+          ? `<p class="kicker">${overlay.scoreA} – ${overlay.scoreB}</p>
              ${
                match.scoreMode === 'unique'
                  ? `<div class="words">${overlay.uniqueA.map((w) => `<span class="chip">${escapeHtml(w)}</span>`).join('')}</div>
-                    <p class="note">Shared (0 pts): ${overlay.shared.length ? overlay.shared.join(', ') : 'none'}</p>
+                    <p class="note">You both found: ${overlay.shared.length ? overlay.shared.join(', ') : 'nothing'}</p>
                     <div class="words">${overlay.uniqueB.map((w) => `<span class="chip">${escapeHtml(w)}</span>`).join('')}</div>`
-                 : `<p class="note">Most accepted words wins. Shared words still count.</p>`
+                 : `<p class="note">Most words wins.</p>`
              }`
           : ''
       }
       ${
         match.asset === 'USDT' && canClaimUsdt(match)
-          ? `<button class="btn btn-ghost" data-act="claim" style="width:100%;margin-top:12px">Claim USDT on Polygon</button>`
+          ? `<button class="btn btn-ghost" data-act="claim" style="width:100%;margin-top:12px">Collect USDT</button>`
           : ''
       }
       ${rematchBlock(match)}
@@ -1088,7 +1128,7 @@ function rematchBlock(match: MatchView): string {
   const secs = Math.max(0, Math.ceil((rematch?.remainingMs ?? 0) / 1000))
   if (rematch?.incoming) {
     return `
-      <p class="kicker" style="margin-top:12px">Rematch? <span data-el="rematch-clock">${secs}s</span></p>
+      <p class="kicker" style="margin-top:12px">Play again? <span data-el="rematch-clock">${secs}s</span></p>
       <div class="rematch-row">
         <button class="btn btn-primary" data-act="accept">Accept</button>
         <button class="btn btn-ghost" data-act="decline">Decline</button>
@@ -1096,9 +1136,9 @@ function rematchBlock(match: MatchView): string {
     `
   }
   if (rematch?.youOffered) {
-    return `<p class="kicker" style="margin-top:12px">Waiting for them to accept… <span data-el="rematch-clock">${secs}s</span></p>`
+    return `<p class="kicker" style="margin-top:12px">Waiting on them… <span data-el="rematch-clock">${secs}s</span></p>`
   }
-  return `<button class="btn btn-primary" data-act="rematch" style="width:100%;margin-top:12px">Rematch</button>`
+  return `<button class="btn btn-primary" data-act="rematch" style="width:100%;margin-top:12px">Play again</button>`
 }
 
 async function goToMatch(id: string) {
@@ -1150,11 +1190,11 @@ function seatState(
   seat: { funded: boolean; scored: boolean; uniqueScore: number | null; playing?: boolean },
   mode: 'unique' | 'count' = 'unique',
 ) {
-  if (seat.uniqueScore !== null) return `${seat.uniqueScore} ${mode === 'count' ? 'words' : 'unique'}`
-  if (seat.scored) return 'traced'
-  if (seat.playing) return 'playing'
-  if (seat.funded) return 'staked'
-  return 'not staked'
+  if (seat.uniqueScore !== null) return `${seat.uniqueScore}`
+  if (seat.scored) return 'done'
+  if (seat.playing) return 'in it'
+  if (seat.funded) return 'in'
+  return 'waiting'
 }
 
 function shortAddr(address: string) {
@@ -1239,6 +1279,18 @@ function teardownPlay() {
   clearPlaySurface()
   stopMatchPoll()
   stopRematchTick()
+}
+
+function flashPop(kind: 'good' | 'bad' | 'already', text: string) {
+  const el = root.querySelector<HTMLElement>('[data-el="pop"]')
+  if (!el) return
+  el.className = `pop ${kind} show`
+  el.textContent = text
+  window.clearTimeout(Number(el.dataset.timer ?? 0))
+  const timerId = window.setTimeout(() => {
+    el.classList.remove('show')
+  }, 700)
+  el.dataset.timer = String(timerId)
 }
 
 function vibrate(ms: number) {
