@@ -23,3 +23,11 @@ export {
   type VerifyOk,
   type VerifyErr,
 } from './verify.ts'
+export {
+  ANAGRAM_LENGTH,
+  sevenLetterWords,
+  pickAnagramSource,
+  wordFromRack,
+  fitsRack,
+  verifyAnagrams,
+} from './anagrams.ts'

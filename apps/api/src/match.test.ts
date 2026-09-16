@@ -215,6 +215,23 @@ describe('versus match', () => {
     expect(liveRematchOffer(match, 1_500)).toBeNull()
   })
 
+  it('plays selected games in order and settles on summed rounds', () => {
+    const match = createMatch(ALICE, { amount: 1, games: ['trace', 'anagrams'] })
+    joinMatch(match, BOB)
+    applyFund(match, fundTx(ALICE, match.id), ESCROW)
+    applyFund(match, fundTx(BOB, match.id), ESCROW)
+    applyScore(match, ALICE, ['CAT'], [])
+    applyScore(match, BOB, ['DOG'], [])
+    expect(match.settledAt).toBeUndefined()
+    expect(match.round).toBe(1)
+    expect(match.games).toEqual(['trace', 'anagrams'])
+    expect(match.challenger.words).toBeUndefined()
+    applyScore(match, ALICE, ['CAT', 'DOG'], [])
+    applyScore(match, BOB, ['CAT'], [])
+    expect(match.settledAt).toBeDefined()
+    expect(match.winner).toBe(ALICE)
+  })
+
   it('accepts a custom NIM amount and a short room code', () => {
     const match = createMatch(ALICE, { amount: 2.5, asset: 'NIM', scoreMode: 'unique', code: 'K7NP2Q' })
     expect(match.stakeUnits).toBe(250_000)

@@ -8,21 +8,29 @@ export function newSeedHex(): string {
   return randomBytes(32).toString('hex')
 }
 
-export function dailySeedHex(secret: string, date: string): string {
-  return createHmac('sha256', secret).update(`daily:${date}`).digest('hex')
+export function dailySeedHex(secret: string, date: string, game = 'trace'): string {
+  return createHmac('sha256', secret).update(`daily:${game}:${date}`).digest('hex')
+}
+
+export function roundSeedHex(seed: string, round: number): string {
+  if (!round) return seed
+  const bytes = Buffer.from(seed, 'hex')
+  if (bytes.length < 32) return seed
+  bytes[31] = (bytes[31]! ^ (round & 0xff)) & 0xff
+  return bytes.toString('hex')
 }
 
 export function signRun(
   secret: string,
-  payload: { runId: string; seed: string; mode: string; startTs: number; playerId: string },
+  payload: { runId: string; seed: string; mode: string; startTs: number; playerId: string; game?: string },
 ): string {
-  const body = `${payload.runId}.${payload.seed}.${payload.mode}.${payload.startTs}.${payload.playerId}`
+  const body = `${payload.runId}.${payload.seed}.${payload.mode}.${payload.startTs}.${payload.playerId}.${payload.game ?? 'trace'}`
   return createHmac('sha256', secret).update(body).digest('hex')
 }
 
 export function checkRunToken(
   secret: string,
-  payload: { runId: string; seed: string; mode: string; startTs: number; playerId: string },
+  payload: { runId: string; seed: string; mode: string; startTs: number; playerId: string; game?: string },
   token: string,
 ): boolean {
   const expected = signRun(secret, payload)

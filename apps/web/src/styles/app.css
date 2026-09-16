@@ -293,6 +293,69 @@ input.code {
   letter-spacing: 0.06em;
 }
 
+.game-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.game-card {
+  appearance: none;
+  border: 0;
+  text-align: left;
+  background: rgba(255, 250, 241, 0.7);
+  border-radius: 20px;
+  padding: 16px 14px;
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  color: inherit;
+  cursor: pointer;
+}
+
+.game-card h2 {
+  margin: 4px 0 0;
+  font-size: 22px;
+}
+
+.game-card p {
+  margin: 6px 0 0;
+  color: var(--mute);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.rack {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 8px 0 16px;
+}
+
+.rack button {
+  appearance: none;
+  width: 48px;
+  height: 56px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--tile);
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  color: var(--ink);
+  font-family: Fraunces, Georgia, serif;
+  font-size: 26px;
+  font-weight: 620;
+  cursor: pointer;
+}
+
+.rack button.on {
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: none;
+}
+
+.rack button:disabled {
+  opacity: 0.35;
+}
+
 .room-code {
   font-family: Fraunces, Georgia, serif;
   font-size: 40px;

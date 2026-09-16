@@ -9,10 +9,13 @@ import {
   generateGridFromHex,
   parseDictionary,
   parseSeedHex,
+  pickAnagramSource,
   pointsForLength,
   RUN_DURATION_MS,
   seedToHex,
+  sevenLetterWords,
   versusScores,
+  verifyAnagrams,
   verifyRun,
   wordFromPath,
 } from '../src/index.ts'
@@ -163,6 +166,39 @@ describe('verifyRun', () => {
   })
 })
 
+describe('anagrams', () => {
+  const dict = parseDictionary('LETTERS\nLETTER\nSET\nREST\nLET\nTEST\nSTEEL\nTREE\nSEE\n')
+
+  it('picks a seven-letter source and a shuffled rack from the seed', () => {
+    const a = pickAnagramSource(seedToHex(seedA), dict)
+    const b = pickAnagramSource(seedToHex(seedA), dict)
+    expect(a.source).toBe(b.source)
+    expect(a.source).toHaveLength(7)
+    expect(a.rack.sort().join('')).toBe(a.source.split('').sort().join(''))
+    expect(sevenLetterWords(dict)).toEqual(['LETTERS'])
+  })
+
+  it('accepts words that fit the rack and rejects extras', () => {
+    const { rack } = pickAnagramSource(seedToHex(seedA), dict)
+    const cells = rack.map((_, i) => i)
+    const result = verifyAnagrams(
+      seedToHex(seedA),
+      [
+        { t: 100, word: 'SET' },
+        { t: 200, word: 'SET' },
+        { t: 300, word: 'DOG' },
+        { t: 400, cells: cells.slice(0, 3) },
+      ],
+      dict,
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.words.includes('SET')).toBe(true)
+    expect(result.rejected.some((r) => r.reason === 'bad-path' || r.reason === 'not-a-word')).toBe(true)
+    expect(result.score).toBeGreaterThan(0)
+  })
+})
+
 describe('dictionary file', () => {
   it('loads the vendored ENABLE list', () => {
     const here = dirname(fileURLToPath(import.meta.url))
@@ -171,5 +207,6 @@ describe('dictionary file', () => {
     expect(dict.size).toBeGreaterThan(100_000)
     expect(dict.has('CAT')).toBe(true)
     expect(dict.has('XYZZY')).toBe(false)
+    expect(sevenLetterWords(dict).length).toBeGreaterThan(1000)
   })
 })

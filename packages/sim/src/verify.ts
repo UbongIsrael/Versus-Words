@@ -7,7 +7,8 @@ export const RUN_DURATION_MS = 90_000
 
 export type InputEvent = {
   t: number
-  cells: number[]
+  cells?: number[]
+  word?: string
 }
 
 export type RejectedInput = {
@@ -62,7 +63,7 @@ export function verifyRun(
       return { ok: false, error: 'bad-input-shape' }
     }
 
-    const path = wordFromPath(grid, event.cells)
+    const path = wordFromPath(grid, event.cells ?? [])
     if (!path.ok) {
       rejected.push({ index: i, reason: 'bad-path' })
       continue

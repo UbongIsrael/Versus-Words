@@ -4,6 +4,7 @@ export type RunRecord = {
   runId: string
   playerId: string
   mode: Mode
+  game?: 'trace' | 'anagrams'
   seed: string
   startTs: number
   consumed: boolean
@@ -31,13 +32,15 @@ export function createStore() {
   return {
     putRun(run: RunRecord) {
       runs.set(run.runId, run)
-      if (run.mode === 'daily') dailyByPlayer.set(`${run.playerId}:${utcDate(run.startTs)}`, run.runId)
+      if (run.mode === 'daily') {
+        dailyByPlayer.set(`${run.playerId}:${run.game ?? 'trace'}:${utcDate(run.startTs)}`, run.runId)
+      }
     },
     getRun(runId: string) {
       return runs.get(runId)
     },
-    dailyRunId(playerId: string, date = utcDate()) {
-      return dailyByPlayer.get(`${playerId}:${date}`)
+    dailyRunId(playerId: string, date = utcDate(), game = 'trace') {
+      return dailyByPlayer.get(`${playerId}:${game}:${date}`)
     },
     consume(run: RunRecord, score: number, words: string[]) {
       run.consumed = true
@@ -45,7 +48,8 @@ export function createStore() {
       run.words = words
       if (run.mode === 'daily') {
         const date = utcDate(run.startTs)
-        const rows = boards.get(date) ?? []
+        const key = `${date}:${run.game ?? 'trace'}`
+        const rows = boards.get(key) ?? []
         const next = rows.filter((r) => r.playerId !== run.playerId)
         next.push({
           playerId: run.playerId,
@@ -54,11 +58,11 @@ export function createStore() {
           submittedAt: Date.now(),
         })
         next.sort((a, b) => b.score - a.score || a.submittedAt - b.submittedAt)
-        boards.set(date, next)
+        boards.set(key, next)
       }
     },
-    leaderboard(date = utcDate(), limit = 20) {
-      return (boards.get(date) ?? []).slice(0, limit)
+    leaderboard(date = utcDate(), limit = 20, game = 'trace') {
+      return (boards.get(`${date}:${game}`) ?? []).slice(0, limit)
     },
   }
 }

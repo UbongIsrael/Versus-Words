@@ -22,12 +22,15 @@ export const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
 export type Asset = 'NIM' | 'USDT'
 export type ScoreMode = 'unique' | 'count'
+export type GameKind = 'trace' | 'anagrams'
+export const GAME_KINDS: GameKind[] = ['trace', 'anagrams']
 
 export type MatchSetup = {
   amount: number
   asset?: Asset
   scoreMode?: ScoreMode
   code?: string
+  games?: GameKind[]
 }
 
 export type Seat = {
@@ -39,6 +42,7 @@ export type Seat = {
   words?: string[]
   inputs?: InputEvent[]
   uniqueScore?: number
+  roundScores?: number[]
   present?: boolean
   lastSeenAt?: number
   evmAddress?: string
@@ -58,6 +62,8 @@ export type Match = {
   seed: string
   asset: Asset
   scoreMode: ScoreMode
+  games: GameKind[]
+  round: number
   stakeAmount: number
   stakeUnits: number
   /** @deprecated same as stakeUnits; kept so older persisted matches still load */
@@ -132,6 +138,24 @@ export function normalizeRoomCode(raw: string): string | null {
   return code
 }
 
+export function parseGames(raw: unknown): GameKind[] {
+  const list = Array.isArray(raw) ? raw : raw ? [raw] : []
+  const out: GameKind[] = []
+  for (const item of list) {
+    if ((item === 'trace' || item === 'anagrams') && !out.includes(item)) out.push(item)
+  }
+  return out.length ? out : ['trace']
+}
+
+export function matchGames(match: Match): GameKind[] {
+  return match.games?.length ? match.games : ['trace']
+}
+
+export function currentGame(match: Match): GameKind {
+  const games = matchGames(match)
+  return games[match.round ?? 0] ?? games[0] ?? 'trace'
+}
+
 export function unitsFor(amount: number, asset: Asset): number {
   if (!Number.isFinite(amount) || amount <= 0) throw new Error('bad-stake')
   if (asset === 'NIM') {
@@ -152,6 +176,7 @@ export function createMatch(
   const options: MatchSetup = typeof setup === 'number' ? { amount: setup } : setup
   const asset: Asset = options.asset === 'USDT' ? 'USDT' : 'NIM'
   const scoreMode: ScoreMode = options.scoreMode === 'count' ? 'count' : 'unique'
+  const games = parseGames(options.games)
   const stakeUnits = unitsFor(options.amount, asset)
   const id = newId().slice(0, 16)
   const code = normalizeRoomCode(options.code ?? '') ?? randomRoomCode()
@@ -161,6 +186,8 @@ export function createMatch(
     seed: newSeedHex(),
     asset,
     scoreMode,
+    games,
+    round: 0,
     stakeAmount: options.amount,
     stakeUnits,
     stakeLuna: stakeUnits,
@@ -183,6 +210,7 @@ export function rematchFrom(previous: Match, now = Date.now()): Match {
       asset: previous.asset ?? 'NIM',
       scoreMode: previous.scoreMode ?? 'unique',
       code: previous.code,
+      games: previous.games,
     },
     now,
   )
@@ -415,8 +443,41 @@ export function applyScore(match: Match, address: string, words: string[], input
   seat.words = words
   seat.inputs = inputs
   match.lastActivityAt = Date.now()
-  if (bothScored(match)) settleFromScores(match)
+  if (bothScored(match)) finishRound(match)
   return seat
+}
+
+function roundPoints(match: Match): { scoreA: number; scoreB: number } {
+  if (!match.opponent || !match.challenger.words || !match.opponent.words) {
+    throw new Error('not-ready')
+  }
+  if ((match.scoreMode ?? 'unique') === 'count') {
+    return { scoreA: match.challenger.words.length, scoreB: match.opponent.words.length }
+  }
+  const result = versusScores(match.challenger.words, match.opponent.words)
+  return { scoreA: result.scoreA, scoreB: result.scoreB }
+}
+
+function finishRound(match: Match): Match {
+  const { scoreA, scoreB } = roundPoints(match)
+  match.challenger.roundScores = [...(match.challenger.roundScores ?? []), scoreA]
+  match.opponent!.roundScores = [...(match.opponent!.roundScores ?? []), scoreB]
+  const games = matchGames(match)
+  const round = match.round ?? 0
+  if (round + 1 < games.length) {
+    match.round = round + 1
+    for (const seat of [match.challenger, match.opponent]) {
+      if (!seat) continue
+      delete seat.words
+      delete seat.inputs
+      delete seat.runId
+      delete seat.runStartedAt
+      delete seat.uniqueScore
+    }
+    match.lastActivityAt = Date.now()
+    return match
+  }
+  return settleFromScores(match)
 }
 
 export function settleFromScores(match: Match): Match {
@@ -426,7 +487,10 @@ export function settleFromScores(match: Match): Match {
   const units = stakeOf(match)
   let scoreA: number
   let scoreB: number
-  if ((match.scoreMode ?? 'unique') === 'count') {
+  if (match.challenger.roundScores?.length && match.opponent.roundScores?.length) {
+    scoreA = match.challenger.roundScores.reduce((sum, n) => sum + n, 0)
+    scoreB = match.opponent.roundScores.reduce((sum, n) => sum + n, 0)
+  } else if ((match.scoreMode ?? 'unique') === 'count') {
     scoreA = match.challenger.words.length
     scoreB = match.opponent.words.length
   } else {
@@ -491,6 +555,9 @@ export function publicMatch(match: Match, viewer?: string | null) {
     seed: bothFunded(match) || you?.funded ? match.seed : null,
     asset: match.asset ?? 'NIM',
     scoreMode: match.scoreMode ?? 'unique',
+    games: matchGames(match),
+    round: match.round ?? 0,
+    game: currentGame(match),
     stakeAmount: match.stakeAmount ?? stakeOf(match) / (match.asset === 'USDT' ? USDT_DECIMALS : LUNA_PER_NIM),
     stakeUnits: stakeOf(match),
     stakeLuna: stakeOf(match),
@@ -518,13 +585,20 @@ export function publicMatch(match: Match, viewer?: string | null) {
       : null,
     challenger: publicSeat(match.challenger),
     opponent: match.opponent ? publicSeat(match.opponent) : null,
-    overlay:
-      bothScored(match) && match.opponent
-        ? versusScores(match.challenger.words ?? [], match.opponent.words ?? [])
-        : null,
+    overlay: overlayView(match),
     rematch: rematchView(match, you?.address ?? null),
     claimedOnChain: Boolean(match.claimedOnChain),
     claimTx: match.claimTx ?? null,
+  }
+}
+
+function overlayView(match: Match) {
+  if (!match.opponent || (!bothScored(match) && !isSettled(match))) return null
+  const raw = versusScores(match.challenger.words ?? [], match.opponent.words ?? [])
+  return {
+    ...raw,
+    scoreA: match.challenger.uniqueScore ?? raw.scoreA,
+    scoreB: match.opponent.uniqueScore ?? raw.scoreB,
   }
 }
 

@@ -9,10 +9,13 @@ function apiUrl(path: string): string {
   return `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`
 }
 
+export type GameKind = 'trace' | 'anagrams'
+
 export type IssuedRun = {
   runId: string
   seed: string
   mode: 'free' | 'daily' | 'versus'
+  game?: GameKind
   startTs: number
   durationMs: number
   token: string
@@ -25,6 +28,9 @@ export type MatchView = {
   seed: string | null
   asset: 'NIM' | 'USDT'
   scoreMode: 'unique' | 'count'
+  games: GameKind[]
+  round: number
+  game: GameKind
   stakeAmount: number
   stakeUnits: number
   stakeLuna: number
@@ -107,6 +113,7 @@ export type ClaimRow = {
 
 export type DailyInfo = {
   date: string
+  game?: GameKind
   seed: string
   played: boolean
   score: number | null
@@ -152,18 +159,22 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  daily: () => req<DailyInfo>('/api/daily'),
-  leaderboard: () => req<Leaderboard>('/api/leaderboard'),
-  start: (mode: 'free' | 'daily') =>
-    req<IssuedRun>('/api/runs', { method: 'POST', body: JSON.stringify({ mode }) }),
+  daily: (game: GameKind = 'trace') => req<DailyInfo>(`/api/daily?game=${game}`),
+  leaderboard: (game: GameKind = 'trace') => req<Leaderboard>(`/api/leaderboard?game=${game}`),
+  start: (mode: 'free' | 'daily', game: GameKind = 'trace') =>
+    req<IssuedRun>('/api/runs', { method: 'POST', body: JSON.stringify({ mode, game }) }),
   submit: (run: IssuedRun, inputs: InputEvent[]) =>
     req<{ accepted: boolean; score: number; words: string[]; rejected: unknown[]; versus?: MatchView }>(
       `/api/runs/${run.runId}/submit`,
       { method: 'POST', body: JSON.stringify({ token: run.token, inputs }) },
     ),
   config: () => req<AppConfig>('/api/config'),
-  createMatch: (body: { stakeAmount: number; asset: 'NIM' | 'USDT'; scoreMode: 'unique' | 'count' }) =>
-    req<MatchView>('/api/matches', { method: 'POST', body: JSON.stringify(body) }),
+  createMatch: (body: {
+    stakeAmount: number
+    asset: 'NIM' | 'USDT'
+    scoreMode: 'unique' | 'count'
+    games: GameKind[]
+  }) => req<MatchView>('/api/matches', { method: 'POST', body: JSON.stringify(body) }),
   getMatch: (id: string, evm?: string) =>
     req<MatchView>(`/api/matches/${id}${evm ? `?evm=${encodeURIComponent(evm)}` : ''}`),
   getMatchByCode: (code: string, evm?: string) =>

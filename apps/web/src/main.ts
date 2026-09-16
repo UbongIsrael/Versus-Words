@@ -2,6 +2,7 @@ import {
   generateGridFromHex,
   hasWord,
   parseDictionary,
+  pickAnagramSource,
   pointsForLength,
   wordFromPath,
   type Dictionary,
@@ -12,6 +13,7 @@ import {
   loadDictionary,
   type ClaimRow,
   type DailyInfo,
+  type GameKind,
   type IssuedRun,
   type Leaderboard,
   type MatchView,
@@ -43,6 +45,18 @@ let playLocked = false
 let matchViewGen = 0
 let paintedMatchKey = ''
 let cachedEvm: string | null = null
+let activeGame: GameKind = 'trace'
+
+const GAME_META: Record<GameKind, { title: string; blurb: string }> = {
+  trace: {
+    title: 'Trace',
+    blurb: 'Finger a path on a 4×4 grid. Adjacent letters, 90 seconds.',
+  },
+  anagrams: {
+    title: 'Anagrams',
+    blurb: 'A real seven-letter word, scattered. Make shorter words. Longer scores more.',
+  },
+}
 
 boot()
 
@@ -81,22 +95,13 @@ async function boot() {
 
 async function showHome() {
   teardownPlay()
-  let daily: DailyInfo
-  let board: Leaderboard
-  try {
-    ;[daily, board] = await Promise.all([api.daily(), api.leaderboard()])
-  } catch {
-    root.innerHTML = `<p class="kicker">API is down.</p>`
-    return
-  }
-
   const session = getSession()
   const pay = session ? true : await isPayAvailable()
 
   root.innerHTML = `
     <header>
       <h1 class="wordmark">Versus Word</h1>
-      <p class="kicker">Trace words. Same letters. The server keeps score.</p>
+      <p class="kicker">Pick a game. Same rooms, same stakes. The server keeps score.</p>
     </header>
     <div class="stack">
       <section class="card">
@@ -113,6 +118,18 @@ async function showHome() {
                  <p class="kicker" style="margin-top:8px">Playing in a browser. Open this URL inside Nimiq Pay to connect a wallet.</p>`
         }
       </section>
+      <div class="game-grid">
+        <button class="game-card" type="button" data-game="trace">
+          <div class="mode-tag">Game</div>
+          <h2>Trace</h2>
+          <p>${escapeHtml(GAME_META.trace.blurb)}</p>
+        </button>
+        <button class="game-card" type="button" data-game="anagrams">
+          <div class="mode-tag">Game</div>
+          <h2>Anagrams</h2>
+          <p>${escapeHtml(GAME_META.anagrams.blurb)}</p>
+        </button>
+      </div>
       ${
         session
           ? `<button class="btn btn-primary" data-act="challenge">New versus room</button>
@@ -120,28 +137,15 @@ async function showHome() {
              <button class="btn btn-ghost" data-act="claims">Rewards</button>`
           : ''
       }
-      <button class="btn ${session ? 'btn-ghost' : 'btn-primary'}" data-act="daily" ${daily.played ? 'disabled' : ''}>
-        ${daily.played ? `Daily done · ${daily.score} pts` : 'Play today’s grid'}
-      </button>
-      <button class="btn btn-ghost" data-act="free">Free run</button>
-      <section class="card">
-        <div class="mode-tag">${daily.date} · daily board</div>
-        ${
-          board.entries.length
-            ? `<ol class="board-list">${board.entries
-                .map(
-                  (row, i) =>
-                    `<li><span>${i + 1}. ${escapeHtml(row.label)}</span><span class="muted">${row.score} · ${row.wordCount} words</span></li>`,
-                )
-                .join('')}</ol>`
-            : `<p class="kicker">No verified scores yet. Be first.</p>`
-        }
-      </section>
     </div>
   `
 
-  root.querySelector('[data-act="daily"]')?.addEventListener('click', () => startRun('daily'))
-  root.querySelector('[data-act="free"]')?.addEventListener('click', () => startRun('free'))
+  root.querySelectorAll<HTMLButtonElement>('[data-game]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const game = btn.dataset.game === 'anagrams' ? 'anagrams' : 'trace'
+      void showGameHub(game)
+    })
+  })
   root.querySelector('[data-act="challenge"]')?.addEventListener('click', () => void showNewChallenge())
   root.querySelector('[data-act="join-code"]')?.addEventListener('click', () => showJoinCode())
   root.querySelector('[data-act="claims"]')?.addEventListener('click', () => {
@@ -252,11 +256,59 @@ function humanConnectError(code: string): string {
   return code
 }
 
-async function startRun(mode: 'free' | 'daily') {
+async function showGameHub(game: GameKind) {
+  teardownPlay()
+  activeGame = game
+  const meta = GAME_META[game]
+  const session = getSession()
+  let daily: DailyInfo
+  let board: Leaderboard
+  try {
+    ;[daily, board] = await Promise.all([api.daily(game), api.leaderboard(game)])
+  } catch {
+    root.innerHTML = `<p class="kicker">API is down.</p>`
+    return
+  }
+
+  root.innerHTML = `
+    <button class="back" type="button" data-act="home">Back</button>
+    <header>
+      <h1 class="wordmark">${escapeHtml(meta.title)}</h1>
+      <p class="kicker">${escapeHtml(meta.blurb)}</p>
+    </header>
+    <div class="stack">
+      <button class="btn btn-primary" data-act="free">Free run</button>
+      <button class="btn btn-ghost" data-act="daily" ${daily.played ? 'disabled' : ''}>
+        ${daily.played ? `Daily done · ${daily.score} pts` : 'Play today’s board'}
+      </button>
+      ${session ? `<button class="btn btn-ghost" data-act="challenge">New versus room</button>` : ''}
+      <section class="card">
+        <div class="mode-tag">${daily.date} · daily</div>
+        ${
+          board.entries.length
+            ? `<ol class="board-list">${board.entries
+                .map(
+                  (row, i) =>
+                    `<li><span>${i + 1}. ${escapeHtml(row.label)}</span><span class="muted">${row.score} · ${row.wordCount} words</span></li>`,
+                )
+                .join('')}</ol>`
+            : `<p class="kicker">No verified scores yet. Be first.</p>`
+        }
+      </section>
+    </div>
+  `
+  root.querySelector('[data-act="home"]')?.addEventListener('click', () => void showHome())
+  root.querySelector('[data-act="free"]')?.addEventListener('click', () => void startRun('free', game))
+  root.querySelector('[data-act="daily"]')?.addEventListener('click', () => void startRun('daily', game))
+  root.querySelector('[data-act="challenge"]')?.addEventListener('click', () => void showNewChallenge([game]))
+}
+
+async function startRun(mode: 'free' | 'daily', game: GameKind = activeGame) {
   if (!dict) return
+  activeGame = game
   let run: IssuedRun
   try {
-    run = await api.start(mode)
+    run = await api.start(mode, game)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'start-failed'
     if (message === 'daily-already-played') {
@@ -272,6 +324,10 @@ async function startRun(mode: 'free' | 'daily') {
 
 function showPlay(run: IssuedRun) {
   if (!dict) return
+  if ((run.game ?? 'trace') === 'anagrams') {
+    showAnagramsPlay(run)
+    return
+  }
   playLocked = true
   stopMatchPoll()
   clearPlaySurface()
@@ -413,17 +469,172 @@ function showResult(mode: string, score: number, words: string[]) {
     </section>
   `
   root.querySelector('[data-act="home"]')?.addEventListener('click', () => void showHome())
-  root.querySelector('[data-act="again"]')?.addEventListener('click', () => void startRun('free'))
+  root.querySelector('[data-act="again"]')?.addEventListener('click', () => void startRun('free', activeGame))
 }
 
-async function showNewChallenge() {
+function showAnagramsPlay(run: IssuedRun) {
+  if (!dict) return
+  playLocked = true
+  stopMatchPoll()
+  clearPlaySurface()
+  const durationMs = run.durationMs > 0 ? run.durationMs : 90_000
+  const { rack } = pickAnagramSource(run.seed, dict)
+  const inputs: InputEvent[] = []
+  const found = new Set<string>()
+  const picked: number[] = []
+  let status: 'idle' | 'good' | 'bad' = 'idle'
+  let statusWord = ''
+  let submitting = false
+
+  root.innerHTML = `
+    <div class="play-head" data-play="1">
+      <button class="back" type="button" data-act="quit">Quit</button>
+      <div class="mode-tag">${run.mode === 'daily' ? 'Daily' : run.mode === 'versus' ? 'Versus' : 'Free run'} · Anagrams</div>
+      <div class="clock" data-el="clock">1:30</div>
+    </div>
+    <div class="current" data-el="current"></div>
+    <div class="rack" data-el="rack"></div>
+    <button class="btn btn-primary" type="button" data-act="submit" style="width:100%">Submit word</button>
+    <div class="found" data-el="found"></div>
+    <div class="scoreline">
+      <span data-el="tally">0 words</span>
+      <span>Longer words score more.</span>
+    </div>
+  `
+
+  const clockEl = root.querySelector<HTMLElement>('[data-el="clock"]')!
+  const currentEl = root.querySelector<HTMLElement>('[data-el="current"]')!
+  const rackEl = root.querySelector<HTMLElement>('[data-el="rack"]')!
+  const foundEl = root.querySelector<HTMLElement>('[data-el="found"]')!
+  const tallyEl = root.querySelector<HTMLElement>('[data-el="tally"]')!
+
+  function currentWord() {
+    return picked.map((i) => rack[i] ?? '').join('')
+  }
+
+  function paintRack() {
+    rackEl.innerHTML = rack
+      .map(
+        (letter, i) =>
+          `<button type="button" data-i="${i}" class="${picked.includes(i) ? 'on' : ''}" ${picked.includes(i) ? 'disabled' : ''}>${escapeHtml(letter)}</button>`,
+      )
+      .join('')
+    rackEl.querySelectorAll<HTMLButtonElement>('button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const i = Number(btn.dataset.i)
+        if (!Number.isInteger(i) || picked.includes(i)) return
+        picked.push(i)
+        status = 'idle'
+        paint()
+      })
+    })
+  }
+
+  function paintFound() {
+    foundEl.innerHTML = [...found]
+      .sort()
+      .map((word) => `<span class="chip">${escapeHtml(word)}</span>`)
+      .join('')
+    tallyEl.textContent = `${found.size} word${found.size === 1 ? '' : 's'}`
+  }
+
+  function paint() {
+    currentEl.classList.toggle('good', status === 'good')
+    currentEl.classList.toggle('bad', status === 'bad')
+    if (status === 'good' || status === 'bad') currentEl.textContent = statusWord
+    else currentEl.textContent = currentWord()
+    paintRack()
+    paintFound()
+  }
+
+  function submitWord() {
+    const cells = [...picked]
+    const word = currentWord()
+    picked.length = 0
+    if (word.length < 3) {
+      status = 'idle'
+      statusWord = ''
+      paint()
+      return
+    }
+    const at = Date.now() - run.startTs
+    if (!hasWord(dict!, word)) {
+      status = 'bad'
+      statusWord = word
+      paint()
+      vibrate(12)
+      return
+    }
+    inputs.push({ t: Math.max(0, at), cells, word })
+    if (!found.has(word)) found.add(word)
+    status = 'good'
+    statusWord = `${word} +${pointsForLength(word.length)}`
+    paint()
+    vibrate(8)
+  }
+
+  paint()
+  root.querySelector('[data-act="submit"]')?.addEventListener('click', submitWord)
+  root.querySelector('[data-act="quit"]')?.addEventListener('click', () => {
+    if (run.mode === 'daily' || run.mode === 'versus') {
+      void finish(run, inputs)
+      return
+    }
+    void showHome()
+  })
+
+  const tick = () => {
+    if (!playLocked) return
+    const left = Math.max(0, durationMs - (Date.now() - run.startTs))
+    const secs = Math.ceil(left / 1000)
+    clockEl.textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+    clockEl.classList.toggle('warn', secs <= 10)
+    if (left <= 0) {
+      void finish(run, inputs)
+      return
+    }
+    timer = window.setTimeout(tick, 200)
+  }
+  tick()
+
+  async function finish(issued: IssuedRun, log: InputEvent[]) {
+    if (submitting) return
+    submitting = true
+    teardownPlay()
+    root.innerHTML = `<p class="kicker">Server is checking your words…</p>`
+    try {
+      const result = await api.submit(issued, log)
+      if (issued.matchId) {
+        history.replaceState({}, '', `/?v=${issued.matchId}`)
+        await showMatch(issued.matchId)
+        return
+      }
+      showResult(issued.mode, result.score, result.words)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'submit-failed'
+      root.innerHTML = `<p class="kicker">${escapeHtml(message)}</p><button class="btn btn-primary" data-act="home">Home</button>`
+      root.querySelector('[data-act="home"]')?.addEventListener('click', () => void showHome())
+    }
+  }
+}
+
+async function showNewChallenge(preset?: GameKind[]) {
   let asset: 'NIM' | 'USDT' = 'NIM'
   let scoreMode: 'unique' | 'count' = 'unique'
+  const selected = new Set<GameKind>(preset?.length ? preset : ['trace'])
   root.innerHTML = `
     <button class="back" type="button" data-act="home">Back</button>
     <h1 class="wordmark">New room</h1>
-    <p class="kicker">Set the table. They join with a six-letter code or the link.</p>
+    <p class="kicker">Pick the games, then the stake. They join with a six-letter code.</p>
     <form class="stack" style="margin-top:22px" data-el="form">
+      <label class="field">
+        <span>Games</span>
+        <div class="seg">
+          <button type="button" data-game="trace">Trace</button>
+          <button type="button" data-game="anagrams">Anagrams</button>
+        </div>
+      </label>
+      <p class="note" data-el="games-hint"></p>
       <label class="field">
         <span>Stake in</span>
         <div class="seg">
@@ -447,9 +658,20 @@ async function showNewChallenge() {
     </form>
   `
   const hint = root.querySelector<HTMLElement>('[data-el="hint"]')!
+  const gamesHint = root.querySelector<HTMLElement>('[data-el="games-hint"]')!
   function paint() {
     root.querySelectorAll('[data-asset]').forEach((btn) => btn.classList.toggle('on', btn.getAttribute('data-asset') === asset))
     root.querySelectorAll('[data-mode]').forEach((btn) => btn.classList.toggle('on', btn.getAttribute('data-mode') === scoreMode))
+    root.querySelectorAll('[data-game]').forEach((btn) => {
+      const game = btn.getAttribute('data-game')
+      btn.classList.toggle('on', game === 'trace' || game === 'anagrams' ? selected.has(game) : false)
+    })
+    gamesHint.textContent =
+      selected.size > 1
+        ? 'You’ll play each selected game, 90 seconds each. Scores add up.'
+        : selected.has('anagrams')
+          ? 'Seven scattered letters. Make as many words as you can.'
+          : 'Same 4×4 grid for both of you.'
     hint.textContent =
       scoreMode === 'count'
         ? 'Whoever finds more accepted words wins. Shared words still count.'
@@ -471,12 +693,24 @@ async function showNewChallenge() {
       paint()
     })
   })
+  root.querySelectorAll<HTMLButtonElement>('[data-game]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const game = btn.dataset.game === 'anagrams' ? 'anagrams' : 'trace'
+      if (selected.has(game)) {
+        if (selected.size === 1) return
+        selected.delete(game)
+      } else selected.add(game)
+      paint()
+    })
+  })
+  paint()
   root.querySelector<HTMLFormElement>('[data-el="form"]')?.addEventListener('submit', async (event) => {
     event.preventDefault()
     const raw = new FormData(event.currentTarget as HTMLFormElement).get('amount')
     const amount = Number(String(raw ?? '').replace(',', '.'))
+    const games = [...selected]
     try {
-      const match = await api.createMatch({ stakeAmount: amount, asset, scoreMode })
+      const match = await api.createMatch({ stakeAmount: amount, asset, scoreMode, games })
       history.replaceState({}, '', `/?v=${match.id}`)
       await showMatch(match.id)
     } catch (err) {
@@ -636,7 +870,16 @@ function paintMatch(match: MatchView) {
   const canFund = Boolean(match.you && !match.you.funded && !match.settled && !match.closed)
   const canPlay = Boolean(match.you?.funded && !match.you.scored && !match.you.playing && !match.settled && !match.closed)
   const stakeLabel = `${formatAmount(match.stakeAmount)} ${match.asset}`
-  const modeLabel = match.scoreMode === 'count' ? 'Most words' : 'Unique words'
+  const games = match.games?.length ? match.games : (['trace'] as GameKind[])
+  const game = match.game ?? games[match.round ?? 0] ?? 'trace'
+  const round = match.round ?? 0
+  const modeLabel = `${games.map((g) => GAME_META[g].title).join(' + ')} · ${
+    match.scoreMode === 'count' ? 'Most words' : 'Unique words'
+  }`
+  const playLabel =
+    games.length > 1
+      ? `Play ${GAME_META[game].title} · round ${round + 1} of ${games.length}`
+      : `Play ${GAME_META[game].title} · 90 seconds`
 
   root.innerHTML = `
     <div class="play-head" data-match-id="${escapeHtml(match.id)}">
@@ -660,7 +903,7 @@ function paintMatch(match: MatchView) {
       ${youNeedWallet ? `<p class="note">Connect a wallet on the home screen, then enter this code.</p>` : ''}
       ${canJoin ? `<button class="btn btn-primary" data-act="join">Sit down</button>` : ''}
       ${canFund ? `<button class="btn btn-primary" data-act="fund">Stake ${escapeHtml(stakeLabel)}</button>` : ''}
-      ${canPlay ? `<button class="btn btn-primary" data-act="play">Play 90 seconds</button>` : ''}
+      ${canPlay ? `<button class="btn btn-primary" data-act="play">${escapeHtml(playLabel)}</button>` : ''}
       ${match.you?.scored && !match.settled ? `<p class="kicker">Waiting for the other trace.</p>` : ''}
       <button class="btn btn-ghost" data-act="copy">Copy invite link</button>
       ${match.settled ? settleBlock(match) : ''}
@@ -934,6 +1177,8 @@ function matchPaintKey(match: MatchView) {
     match.you?.funded ?? '',
     match.you?.scored ?? '',
     match.you?.playing ?? '',
+    match.game ?? '',
+    match.round ?? '',
     match.winner ?? '',
     match.claimedOnChain ?? '',
     match.rematch?.from ?? '',

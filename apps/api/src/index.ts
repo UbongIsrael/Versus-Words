@@ -8,6 +8,7 @@ import { cors } from 'hono/cors'
 import {
   generateGridFromHex,
   parseDictionary,
+  verifyAnagrams,
   verifyRun,
   type InputEvent,
 } from '@versus/sim'
@@ -125,14 +126,20 @@ app.post('/api/session', async (c) => {
   })
 })
 
+function parseGame(raw: unknown): 'trace' | 'anagrams' {
+  return raw === 'anagrams' ? 'anagrams' : 'trace'
+}
+
 app.get('/api/daily', (c) => {
   const playerId = playerIdFrom(c)
   const date = utcDate()
-  const seed = dailySeedHex(SECRET, date)
-  const existingId = playerId ? store.dailyRunId(playerId, date) : undefined
+  const game = parseGame(c.req.query('game'))
+  const seed = dailySeedHex(SECRET, date, game)
+  const existingId = playerId ? store.dailyRunId(playerId, date, game) : undefined
   const existing = existingId ? store.getRun(existingId) : undefined
   return c.json({
     date,
+    game,
     seed,
     played: Boolean(existing?.consumed),
     score: existing?.score ?? null,
@@ -142,9 +149,11 @@ app.get('/api/daily', (c) => {
 
 app.get('/api/leaderboard', (c) => {
   const date = c.req.query('date') || utcDate()
+  const game = parseGame(c.req.query('game'))
   return c.json({
     date,
-    entries: store.leaderboard(date).map((row) => ({
+    game,
+    entries: store.leaderboard(date, 20, game).map((row) => ({
       label: maskPlayer(row.playerId),
       score: row.score,
       wordCount: row.wordCount,
@@ -165,10 +174,11 @@ app.post('/api/runs', async (c) => {
   if (!playerId) return c.json({ error: 'player-required' }, 400)
   const body = await c.req.json().catch(() => ({}))
   const mode: Mode = body.mode === 'daily' ? 'daily' : 'free'
+  const game = parseGame(body.game)
   const date = utcDate()
 
   if (mode === 'daily') {
-    const existingId = store.dailyRunId(playerId, date)
+    const existingId = store.dailyRunId(playerId, date, game)
     const existing = existingId ? store.getRun(existingId) : undefined
     if (existing?.consumed) {
       return c.json(
@@ -182,6 +192,7 @@ app.post('/api/runs', async (c) => {
         runId: existing.runId,
         seed: existing.seed,
         mode: existing.mode,
+        game: existing.game ?? game,
         startTs: existing.startTs,
         durationMs: 90_000,
         token,
@@ -190,15 +201,16 @@ app.post('/api/runs', async (c) => {
   }
 
   const runId = newId()
-  const seed = mode === 'daily' ? dailySeedHex(SECRET, date) : newSeedHex()
+  const seed = mode === 'daily' ? dailySeedHex(SECRET, date, game) : newSeedHex()
   const startTs = Date.now()
-  const run = { runId, playerId, mode, seed, startTs, consumed: false }
+  const run = { runId, playerId, mode, game, seed, startTs, consumed: false }
   store.putRun(run)
   const token = signRun(SECRET, run)
   return c.json({
     runId,
     seed,
     mode,
+    game,
     startTs,
     durationMs: 90_000,
     token,
@@ -225,7 +237,10 @@ app.post('/api/runs/:id/submit', async (c) => {
     // Client score is ignored. Keep going.
   }
 
-  const verified = verifyRun(generateGridFromHex(run.seed), body.inputs as InputEvent[], dict)
+  const verified =
+    (run.game ?? 'trace') === 'anagrams'
+      ? verifyAnagrams(run.seed, body.inputs as InputEvent[], dict)
+      : verifyRun(generateGridFromHex(run.seed), body.inputs as InputEvent[], dict)
   if (!verified.ok) return c.json({ error: verified.error }, 400)
 
   store.consume(run, verified.score, verified.words)

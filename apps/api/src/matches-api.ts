@@ -5,6 +5,7 @@ import {
   acceptRematch,
   applyFund,
   applyScore,
+  currentGame,
   createMatch,
   declineRematch,
   keepForClaim,
@@ -21,6 +22,7 @@ import {
   sweepMatch,
   touchPresence,
   normalizeRoomCode,
+  parseGames,
   RUN_MS,
   type Match,
 } from './match.ts'
@@ -28,7 +30,7 @@ import { isGuestId, normalizeWalletAddress } from './nimiq.ts'
 import { createMatchStore } from './persist.ts'
 import type { Store } from './store.ts'
 import { oracleAddress, playerDeposited, readPot, listOpenPotsForPlayer, KNOWN_ESCROW_POTS, signSettle, winnerCode, USDT_ESCROW, USDT_TOKEN, POLYGON_CHAIN_ID, usdtEscrowConfigured } from './polygon.ts'
-import { newId, signRun } from './token.ts'
+import { newId, roundSeedHex, signRun } from './token.ts'
 
 type PlayerFn = (c: { req: { header: (n: string) => string | undefined; query: (n: string) => string | undefined } }) =>
   | string
@@ -142,6 +144,7 @@ export async function attachMatchRoutes(
       escrowAddress: escrowConfigured() ? ESCROW_ADDRESS : null,
       assets: ['NIM', 'USDT'],
       scoreModes: ['unique', 'count'],
+      games: ['trace', 'anagrams'],
       lunaPerNim: 100_000,
       fakeChain: fakeChain(),
       usdt: {
@@ -224,12 +227,14 @@ export async function attachMatchRoutes(
         asset: body.asset === 'USDT' ? 'USDT' : 'NIM',
         scoreMode: body.scoreMode === 'count' ? 'count' : 'unique',
         code: code ?? undefined,
+        games: parseGames(body.games),
       })
       for (let i = 0; i < 8 && taken(match.code); i++) {
         match = createMatch(wallet, {
           amount: Number(body.stakeAmount ?? body.stakeNim),
           asset: body.asset === 'USDT' ? 'USDT' : 'NIM',
           scoreMode: body.scoreMode === 'count' ? 'count' : 'unique',
+          games: parseGames(body.games),
         })
       }
       if (taken(match.code)) throw new Error('code-taken')
@@ -370,6 +375,7 @@ export async function attachMatchRoutes(
           runId: existing.runId,
           seed: existing.seed,
           mode: existing.mode,
+          game: existing.game ?? currentGame(match),
           startTs: existing.startTs,
           durationMs: RUN_MS,
           token: signRun(opts.secret, existing),
@@ -379,11 +385,13 @@ export async function attachMatchRoutes(
     }
     const runId = newId()
     const startTs = Date.now()
+    const game = currentGame(match)
     const run = {
       runId,
       playerId: wallet,
       mode: 'versus' as const,
-      seed: match.seed,
+      game,
+      seed: roundSeedHex(match.seed, match.round ?? 0),
       startTs,
       consumed: false,
       matchId: match.id,
@@ -396,6 +404,7 @@ export async function attachMatchRoutes(
       runId,
       seed: run.seed,
       mode: run.mode,
+      game: run.game,
       startTs,
       durationMs: RUN_MS,
       token: signRun(opts.secret, run),
