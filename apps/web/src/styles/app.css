@@ -316,13 +316,27 @@ button,
 
 .clock {
   font-family: Fraunces, Georgia, serif;
-  font-size: 34px;
+  font-size: 42px;
   font-weight: 620;
   font-variant-numeric: tabular-nums;
+  min-width: 2.4ch;
+  text-align: right;
+  line-height: 1;
 }
 
 .clock.warn {
-  color: var(--accent);
+  color: var(--bad);
+  animation: clock-pulse 0.7s ease-in-out infinite;
+}
+
+@keyframes clock-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.14);
+  }
 }
 
 .mode-tag {
@@ -409,14 +423,76 @@ button,
   font-size: 14px;
 }
 
+.result {
+  text-align: center;
+  padding-top: 8px;
+}
+
 .result h2 {
   margin: 8px 0 4px;
-  font-size: 56px;
+  font-size: 72px;
+  animation: score-in 0.55s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+.result.win h2 {
+  color: var(--good);
+}
+
+.result.lose h2 {
+  color: var(--bad);
 }
 
 .result p {
   margin: 0 0 18px;
   color: var(--mute);
+}
+
+@keyframes score-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.recap-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 0 0 18px;
+  text-align: left;
+}
+
+.recap-col {
+  background: rgba(255, 250, 241, 0.7);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 12px;
+}
+
+.recap-col.you {
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+
+.recap-col .who {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+.recap-col .pts {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 36px;
+  font-weight: 620;
+  margin: 2px 0 8px;
+}
+
+.recap-col .words {
+  margin: 0;
 }
 
 .words {
@@ -550,6 +626,22 @@ input.code {
   background: var(--ink);
   color: var(--paper);
   box-shadow: none;
+}
+
+.rack button.press {
+  animation: tile-bounce 0.28s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+
+@keyframes tile-bounce {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(0.82) translateY(5px);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .rack button:disabled {

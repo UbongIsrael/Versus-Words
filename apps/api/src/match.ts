@@ -40,6 +40,7 @@ export type Seat = {
   runId?: string
   runStartedAt?: number
   words?: string[]
+  allWords?: string[]
   inputs?: InputEvent[]
   uniqueScore?: number
   roundScores?: number[]
@@ -441,6 +442,7 @@ export function applyScore(match: Match, address: string, words: string[], input
   if (!seat.funded) throw new Error('not-funded')
   if (seat.words) throw new Error('already-scored')
   seat.words = words
+  seat.allWords = [...(seat.allWords ?? []), ...words]
   seat.inputs = inputs
   match.lastActivityAt = Date.now()
   if (bothScored(match)) finishRound(match)
@@ -549,6 +551,7 @@ export function expireMatch(match: Match, now = Date.now()): boolean {
 
 export function publicMatch(match: Match, viewer?: string | null) {
   const you = viewer ? seatOf(match, viewer) : null
+  const revealWords = bothScored(match) || isSettled(match)
   return {
     id: match.id,
     code: match.code,
@@ -578,13 +581,13 @@ export function publicMatch(match: Match, viewer?: string | null) {
           funded: you.funded,
           scored: Boolean(you.words),
           playing: seatPlaying(you),
-          words: you.words ?? null,
+          words: you.allWords ?? you.words ?? null,
           uniqueScore: you.uniqueScore ?? null,
           evmAddress: you.evmAddress ?? null,
         }
       : null,
-    challenger: publicSeat(match.challenger),
-    opponent: match.opponent ? publicSeat(match.opponent) : null,
+    challenger: publicSeat(match.challenger, revealWords),
+    opponent: match.opponent ? publicSeat(match.opponent, revealWords) : null,
     overlay: overlayView(match),
     rematch: rematchView(match, you?.address ?? null),
     claimedOnChain: Boolean(match.claimedOnChain),
@@ -615,13 +618,15 @@ function rematchView(match: Match, viewer: string | null) {
   }
 }
 
-function publicSeat(seat: Seat) {
+function publicSeat(seat: Seat, reveal = false) {
+  const words = seat.allWords ?? seat.words ?? []
   return {
     address: seat.address,
     funded: seat.funded,
     scored: Boolean(seat.words),
     playing: seatPlaying(seat),
-    wordCount: seat.words?.length ?? 0,
+    wordCount: words.length,
+    words: reveal ? words : null,
     uniqueScore: seat.uniqueScore ?? null,
     evmAddress: seat.evmAddress ?? null,
   }

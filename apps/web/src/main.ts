@@ -456,12 +456,14 @@ function showPlay(run: IssuedRun) {
     root.innerHTML = `<p class="kicker">Checking your words…</p>`
     try {
       const result = await api.submit(issued, log)
-      if (issued.matchId) {
-        history.replaceState({}, '', `/?v=${issued.matchId}`)
-        await showMatch(issued.matchId)
-        return
-      }
-      showResult(issued.mode, result.score, result.words)
+      showRecap({
+        mode: issued.mode,
+        game: issued.game ?? activeGame,
+        score: result.score,
+        words: result.words,
+        match: result.versus ?? null,
+        matchId: issued.matchId,
+      })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'submit-failed'
       root.innerHTML = `<p class="kicker">${escapeHtml(message)}</p><button class="btn btn-primary" data-act="home">Home</button>`
@@ -471,20 +473,108 @@ function showPlay(run: IssuedRun) {
 }
 
 function showResult(mode: string, score: number, words: string[]) {
+  showRecap({ mode, game: activeGame, score, words })
+}
+
+function wordChips(words: string[]) {
+  if (!words.length) return `<p class="note">No words.</p>`
+  return `<div class="words">${words.map((word) => `<span class="chip">${escapeHtml(word)}</span>`).join('')}</div>`
+}
+
+function showRecap(opts: {
+  mode: string
+  game?: GameKind
+  score: number
+  words: string[]
+  match?: MatchView | null
+  matchId?: string
+}) {
+  teardownPlay()
+  const match = opts.match
+  const settled = Boolean(match?.settled)
+  const youAddr = match?.you?.address
+  const youSeat = match?.you
+  const them =
+    !youAddr || !match?.opponent
+      ? null
+      : match.challenger.address === youAddr
+        ? match.opponent
+        : match.challenger
+  const youWon = settled && match?.winner && youAddr && (match.winner === 'tie' ? null : match.winner === youAddr)
+  const title = !match
+    ? String(opts.score)
+    : settled
+      ? match.winner === 'tie'
+        ? 'Tie'
+        : youWon
+          ? 'You won'
+          : 'They won'
+      : String(opts.score)
+  const youScore = youSeat?.uniqueScore ?? opts.score
+  const youWords = youSeat?.words ?? opts.words
+  const themScore = them && (settled || match?.bothScored) ? them.uniqueScore : null
+  const themWords = them && (settled || match?.bothScored) ? them.words : null
+  const nextRound = Boolean(opts.matchId && match && !settled && !match.you?.scored)
+  const waiting = Boolean(opts.matchId && match && !settled && match.you?.scored && !match.bothScored)
+  const tone = !match || !settled ? '' : match.winner === 'tie' ? '' : youWon ? ' win' : ' lose'
+
   root.innerHTML = `
-    <section class="result">
-      <div class="mode-tag">${mode === 'daily' ? 'Today' : mode === 'versus' ? 'Versus' : 'Practice'}</div>
-      <h2>${score}</h2>
-      <p>${words.length} word${words.length === 1 ? '' : 's'}.</p>
-      <div class="words">${words.map((word) => `<span class="chip">${escapeHtml(word)}</span>`).join('')}</div>
+    <section class="result${tone}">
+      <div class="mode-tag">${opts.game === 'anagrams' ? 'Anagrams' : opts.game === 'trace' ? 'Trace' : ''} ${
+        opts.mode === 'daily' ? '· Today' : opts.mode === 'versus' ? '· Versus' : '· Practice'
+      }</div>
+      <h2>${escapeHtml(title)}</h2>
+      ${
+        themWords
+          ? `<div class="recap-split">
+              <div class="recap-col you">
+                <div class="who">You</div>
+                <div class="pts">${youScore}</div>
+                ${wordChips(youWords)}
+              </div>
+              <div class="recap-col">
+                <div class="who">Them</div>
+                <div class="pts">${themScore ?? '—'}</div>
+                ${wordChips(themWords)}
+              </div>
+            </div>`
+          : `<p>${youWords.length} word${youWords.length === 1 ? '' : 's'} · ${youScore} pts</p>
+             ${wordChips(youWords)}
+             ${waiting ? `<p class="kicker">Waiting on them…</p>` : nextRound ? `<p class="kicker">Next game is ready.</p>` : ''}`
+      }
       <div class="stack">
-        <button class="btn btn-primary" data-act="home">Home</button>
-        ${mode === 'free' ? `<button class="btn btn-ghost" data-act="again">Play again</button>` : ''}
+        ${
+          opts.matchId
+            ? `<button class="btn btn-primary" data-act="room">${nextRound ? 'Next game' : 'Room'}</button>`
+            : `<button class="btn btn-primary" data-act="home">Home</button>`
+        }
+        ${opts.mode === 'free' ? `<button class="btn btn-ghost" data-act="again">Play again</button>` : ''}
       </div>
     </section>
   `
-  root.querySelector('[data-act="home"]')?.addEventListener('click', () => void showHome())
-  root.querySelector('[data-act="again"]')?.addEventListener('click', () => void startRun('free', activeGame))
+  root.querySelector('[data-act="home"]')?.addEventListener('click', () => {
+    history.replaceState({}, '', '/')
+    void showHome()
+  })
+  root.querySelector('[data-act="room"]')?.addEventListener('click', () => {
+    if (opts.matchId) {
+      history.replaceState({}, '', `/?v=${opts.matchId}`)
+      void showMatch(opts.matchId)
+    }
+  })
+  root.querySelector('[data-act="again"]')?.addEventListener('click', () => void startRun('free', opts.game ?? activeGame))
+
+  if (waiting && opts.matchId) {
+    const id = opts.matchId
+    matchPoll = window.setTimeout(async () => {
+      try {
+        const latest = await api.getMatch(id)
+        showRecap({ ...opts, match: latest, score: opts.score, words: opts.words })
+      } catch {
+        matchPoll = window.setTimeout(() => void showRecap(opts), 2000)
+      }
+    }, 1600)
+  }
 }
 
 function showAnagramsPlay(run: IssuedRun) {
@@ -550,6 +640,7 @@ function showAnagramsPlay(run: IssuedRun) {
         status = 'idle'
         paintSpell()
         paintRack()
+        rackEl.querySelector(`[data-i="${i}"]`)?.classList.add('press')
       })
     })
   }
@@ -652,12 +743,14 @@ function showAnagramsPlay(run: IssuedRun) {
     root.innerHTML = `<p class="kicker">Checking your words…</p>`
     try {
       const result = await api.submit(issued, log)
-      if (issued.matchId) {
-        history.replaceState({}, '', `/?v=${issued.matchId}`)
-        await showMatch(issued.matchId)
-        return
-      }
-      showResult(issued.mode, result.score, result.words)
+      showRecap({
+        mode: issued.mode,
+        game: issued.game ?? activeGame,
+        score: result.score,
+        words: result.words,
+        match: result.versus ?? null,
+        matchId: issued.matchId,
+      })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'submit-failed'
       root.innerHTML = `<p class="kicker">${escapeHtml(message)}</p><button class="btn btn-primary" data-act="home">Home</button>`
@@ -1096,31 +1189,37 @@ async function fundSeat(id: string) {
 }
 
 function settleBlock(match: MatchView): string {
-  const overlay = match.overlay
+  const youAddr = match.you?.address
+  const youWon =
+    match.winner === 'tie' ? null : Boolean(youAddr && match.winner === youAddr)
   const title =
-    match.winner === 'tie'
-      ? 'Tie — stakes back'
-      : match.winner && match.you && match.winner === match.you.address
-        ? 'You won'
-        : match.winner
-          ? `${shortAddr(match.winner)} won`
-          : 'Done'
+    match.winner === 'tie' ? 'Tie — stakes back' : youWon ? 'You won' : match.winner ? 'They won' : 'Done'
+  const them =
+    !youAddr || !match.opponent
+      ? null
+      : match.challenger.address === youAddr
+        ? match.opponent
+        : match.challenger
+  const youWords = match.you?.words ?? []
+  const themWords = them?.words ?? []
+  const youScore = match.you?.uniqueScore ?? 0
+  const themScore = them?.uniqueScore ?? 0
   return `
-    <section class="card">
+    <section class="result${match.winner === 'tie' ? '' : youWon ? ' win' : ' lose'}" style="text-align:center">
       <div class="mode-tag">Score</div>
-      <h2 style="font-size:32px;margin:8px 0 4px">${escapeHtml(title)}</h2>
-      ${
-        overlay
-          ? `<p class="kicker">${overlay.scoreA} – ${overlay.scoreB}</p>
-             ${
-               match.scoreMode === 'unique'
-                 ? `<div class="words">${overlay.uniqueA.map((w) => `<span class="chip">${escapeHtml(w)}</span>`).join('')}</div>
-                    <p class="note">You both found: ${overlay.shared.length ? overlay.shared.join(', ') : 'nothing'}</p>
-                    <div class="words">${overlay.uniqueB.map((w) => `<span class="chip">${escapeHtml(w)}</span>`).join('')}</div>`
-                 : `<p class="note">Most words wins.</p>`
-             }`
-          : ''
-      }
+      <h2>${escapeHtml(title)}</h2>
+      <div class="recap-split">
+        <div class="recap-col you">
+          <div class="who">You</div>
+          <div class="pts">${youScore}</div>
+          ${wordChips(youWords)}
+        </div>
+        <div class="recap-col">
+          <div class="who">Them</div>
+          <div class="pts">${themScore}</div>
+          ${wordChips(themWords)}
+        </div>
+      </div>
       ${
         match.asset === 'USDT' && canClaimUsdt(match)
           ? `<button class="btn btn-ghost" data-act="claim" style="width:100%;margin-top:12px">Collect USDT</button>`
