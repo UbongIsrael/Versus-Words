@@ -8,7 +8,7 @@ Read this before proposing features, scaffolding an app, or “just adding payme
 
 Ship **one** working Mini App inside Nimiq Pay in four weeks. It must be usable on the first try, use NIM or USDT as a core interaction (NIM earns bonus), live on a public HTTPS URL, and open-sourced under MIT.
 
-The product is **Versus Word**: a 90-second same-seed word-hunt duel. The client sends traces; the server is the only thing that may write a score or release a pot. The invite link is the growth loop. Spec: [`docs/versus-word.md`](docs/versus-word.md).
+The product is **Versus Words**: a 90-second same-seed word-hunt duel. The client sends traces; the server is the only thing that may write a score or release a pot. The invite link is the growth loop. Spec: [`docs/versus-word.md`](docs/versus-word.md).
 
 ## Competition facts
 
@@ -38,7 +38,7 @@ The product is **Versus Word**: a 90-second same-seed word-hunt duel. The client
 
 **This builder (locked):** solo, cold start, **goal is placing, not monetizing**.
 
-**Idea (locked):** Versus Word — same-seed word-hunt duel, server resimulates, NIM pot, invite link. Spec: [`docs/versus-word.md`](docs/versus-word.md). Grades: [`CYCLE2-IDEAS.md`](CYCLE2-IDEAS.md).
+**Idea (locked):** Versus Words — same-seed word-hunt duel, server resimulates, NIM pot, invite link. Spec: [`docs/versus-word.md`](docs/versus-word.md). Grades: [`CYCLE2-IDEAS.md`](CYCLE2-IDEAS.md).
 
 Code is in. Golden path: `packages/sim` (truth), `apps/api` (runs + matches), `apps/web` (tracer + versus). Match rules live in `apps/api/src/match.ts`. Local dev uses `FAKE_CHAIN=1`.
 
@@ -259,7 +259,7 @@ One crossword, one daily mural-of-the-day, or one 15-minute live auction of a co
 - Must not become: a pixel canvas (Space already has 500×500) or a YouTube jukebox.
 - Kill test: two phones in different countries show the identical state within 1s, and a paid action is visible to both without refresh.
 
-### C. Versus Word — invite-duel skill game with server replay (high)
+### C. Versus Words — invite-duel skill game with server replay (high)
 
 Not a jumper. A 90-second word / geography / calculation duel. Server issues the seed. Both players get the same board. Client sends inputs only. Server resimulates. Higher verified score takes the pot. Challenge link is the entire growth loop. Daily seed for a global board; VS for friends.
 
@@ -344,7 +344,7 @@ Score each candidate 1–5 on:
 
 Ship the highest score. If two tie, pick the one you can test with real humans in week 1.
 
-**Default recommendation if the user has no strong preference:** **A (Table Pay)** or **C (Versus Word)** if the team is product/UX-heavy vs game-engine-comfortable. **B (One Object)** if they can run a tiny realtime backend and want Space-adjacent presence without competing with Space. **D (Door Stake)** if they can host or attend one real meetup during the cycle.
+**Default recommendation if the user has no strong preference:** **A (Table Pay)** or **C (Versus Words)** if the team is product/UX-heavy vs game-engine-comfortable. **B (One Object)** if they can run a tiny realtime backend and want Space-adjacent presence without competing with Space. **D (Door Stake)** if they can host or attend one real meetup during the cycle.
 
 ## Agent working rules
 
@@ -375,7 +375,7 @@ Still useful later, not blocking: second phone available? city for an IRL demo v
 
 ## Open questions — resolved or deferred
 
-Idea is Versus Word. Follow [`docs/versus-word.md`](docs/versus-word.md). Run `npm test` after sim changes. Dev: `npm run dev` (API 8787, web 5173).
+Idea is Versus Words. Follow [`docs/versus-word.md`](docs/versus-word.md). Run `npm test` after sim changes. Dev: `npm run dev` (API 8787, web 5173).
 
 ## Canonical links
 

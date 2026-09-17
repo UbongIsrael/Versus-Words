@@ -1,8 +1,12 @@
-# Versus Word
+# Versus Words
 
-A Nimiq Pay Mini App for Cycle II: 90 seconds, one 4×4 grid, the server resimulates your traces. Wallet login and versus pots are next.
+**Same letters. More words wins.**
 
-Spec: [docs/versus-word.md](docs/versus-word.md)
+Versus Words is a leisure word game for friends — and anyone who sits at an open table. You get the same letters, ninety seconds on the clock, and two ways to play: **Trace** (draw words on a grid) or **Anagrams** (make words from a scattered rack). It’s built for people who like English, like a bit of pressure, and like finding out who actually knows more words.
+
+You can play for fun: practice any time, or take today’s board. You can also put NIM or USDT on the line. You both get the same letters. When the clock runs out, whoever found more takes the pot. In unique-words, a word you both found counts for nobody. In most-words, every word counts. Invite a friend with a code, or open a table and let a stranger sit.
+
+A [Nimiq Pay](https://nimiq.dev/mini-apps) Mini App for Cycle II. Spec: [docs/versus-word.md](docs/versus-word.md).
 
 ## Run
 
@@ -27,14 +31,8 @@ Production (split hosts):
   - Env: `CORS_ORIGINS=https://your-frontend.vercel.app`, `RUN_SECRET`, plus chain keys as needed.
   - Rooms live in memory plus `matches.json`. That file dies with the container on a Cloud Run rebuild. Set `MATCH_BUCKET` to a GCS bucket (same project, service account `roles/storage.objectAdmin`) so rooms come back after deploy. Keep `--max-instances=1`. `/health` reports `matches: gcs:bucket/matches.json` when it is on.
 
-Play in a phone-sized viewport. For Nimiq Pay later: same Wi-Fi, Custom URL → your machine.
+Play in a phone-sized viewport. In Nimiq Pay: Custom URL → your live HTTPS host.
 
-## Now / next
+`npm run dev` uses `FAKE_CHAIN=1`. Live USDT pots: deploy [`contracts/src/VersusEscrow.sol`](contracts/src/VersusEscrow.sol), set `USDT_ESCROW` + `POLYGON_ORACLE_KEY`. Contract tests: `npm test --prefix contracts`.
 
-Shipped in this scaffold: shared `sim/`, canvas tracer, free run, daily seed, server-side verify, unseeded leaderboard.
-
-In: Nimiq Pay login. Versus: Challenge someone → pick 1 / 5 / 10 NIM → copy invite (`/?v=…`) → both stake → same 90s grid → unique words take the pot.
-
-`npm run dev` uses `FAKE_CHAIN=1`. Live USDT pots: deploy [`contracts/src/VersusEscrow.sol`](contracts/src/VersusEscrow.sol), set `USDT_ESCROW` + `POLYGON_ORACLE_KEY`. Contract tests: `npm test --prefix contracts`. NIM HTLCs wait on Pay adding the methods.
-
-Game rules / first-play notes: [docs/game-mechanics.md](docs/game-mechanics.md)
+Game rules: [docs/game-mechanics.md](docs/game-mechanics.md).

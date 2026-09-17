@@ -1,10 +1,10 @@
-# Versus Word — product spec
+# Versus Words — product spec
 
 Locked Cycle II entry. Solo, cold start, place-first. Kickoff 24 Aug, close 19 Sep.
 
 Scaffold is in. `npm install && npm test && npm run dev` — free run + daily, no wallet, no pots.
 
-Working title: **Versus Word**. Ship name can change in week 3 if a better one is obvious. Do not bikeshed it now.
+Working title: **Versus Words**. Ship name can change in week 3 if a better one is obvious. Do not bikeshed it now.
 
 ## One-liner
 
@@ -231,11 +231,11 @@ Pre-kickoff is real time. Use it.
 
 ## Builder story (draft, rewrite from a real match)
 
-Web3 games pay the client for a number the client invented. Versus Word does not ask you to trust a score. You and I get the same sixteen letters. We trace. The server walks the path itself. Only words that appear on the grid, in the dictionary, in time, count — and in a duel, only the words the other person missed.
+Web3 games pay the client for a number the client invented. Versus Words does not ask you to trust a score. You and I get the same sixteen letters. We trace. The server walks the path itself. Only words that appear on the grid, in the dictionary, in time, count — and in a duel, only the words the other person missed.
 
 ## Submission (draft)
 
-Versus Word is a 90-second word-hunt Mini App. Daily, everyone plays the same server-issued grid. Versus, two wallets stake NIM on the same seed; the server resimulates both input logs and pays the player who found more unique words. The client never submits a score. Nimiq Pay is login, stake, payout, and the invite deeplink.
+Versus Words is a 90-second word-hunt Mini App. Daily, everyone plays the same server-issued grid. Versus, two wallets stake NIM on the same seed; the server resimulates both input logs and pays the player who found more unique words. The client never submits a score. Nimiq Pay is login, stake, payout, and the invite deeplink.
 
 ## Open before code (none blocking)
 

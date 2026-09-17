@@ -21,7 +21,7 @@ export function createSessionStore() {
       const issuedAt = new Date().toISOString()
       const expiresAt = Date.now() + CHALLENGE_TTL_MS
       const message = [
-        'Versus Word login',
+        'Versus Words login',
         `Wallet: ${walletAddress}`,
         `Nonce: ${id}`,
         `Issued: ${issuedAt}`,

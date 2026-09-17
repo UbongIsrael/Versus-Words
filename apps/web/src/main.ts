@@ -45,6 +45,7 @@ let matchPoll: number | null = null
 let rematchTick: number | null = null
 let playLocked = false
 let playClearTimer: number | null = null
+let pendingNotice: string | null = null
 let matchViewGen = 0
 let paintedMatchKey = ''
 let cachedEvm: string | null = null
@@ -75,13 +76,64 @@ function gameModeHint(mode: 'unique' | 'count') {
     : 'If you both find the same word, it cancels out. Only words they missed count.'
 }
 
+function humanError(code: string): string {
+  if (code === 'not-in-pay') return 'Open this in Nimiq Pay, then try again.'
+  if (code === 'no-account' || code === 'no-evm-account') return 'No wallet found in Pay.'
+  if (code === 'PermissionDeniedError' || /denied|reject|User rejected/i.test(code)) return 'You cancelled.'
+  if (code === 'wallet-required' || code === 'player-required') return 'Connect your wallet first.'
+  if (code === 'bad-stake') return 'Pick an amount between 0.1 and 100,000.'
+  if (code === 'bad-match' || code === 'create-failed') return 'Couldn’t open that table.'
+  if (code === 'code-taken') return 'That code’s taken. Try again.'
+  if (code === 'seat-taken') return 'That seat just filled. Pick another.'
+  if (code === 'self-join') return 'That’s your table.'
+  if (code === 'room-closed' || code === 'settled') return 'This one’s over.'
+  if (code === 'not-funded') return 'Put your stake in first.'
+  if (code === 'already-scored') return 'You already played this round.'
+  if (code === 'not-settled') return 'The round isn’t over yet.'
+  if (code === 'not-seen-on-chain' || code === 'tx-not-found') return 'The payment isn’t on-chain yet. Wait a moment.'
+  if (code === 'escrow-unconfigured' || code === 'usdt-escrow-unconfigured') return 'Can’t take that stake right now.'
+  if (code === 'evm-required' || code === 'no-ethereum') return 'Need the Polygon wallet in Pay.'
+  if (code === 'switch-polygon') return 'Switch to Polygon, then try again.'
+  if (code === 'pot-missing') return 'Nothing left to collect.'
+  if (code === 'unknown-match' || code === 'bad-code') return 'That code’s gone.'
+  if (code === 'join-failed') return 'Couldn’t sit down.'
+  if (code === 'run-failed') return 'Couldn’t start the round.'
+  if (code === 'fund-failed') return 'Stake didn’t go through.'
+  if (code === 'rematch-failed' || code === 'accept-failed' || code === 'decline-failed' || code === 'no-offer')
+    return 'Couldn’t start the rematch.'
+  if (code === 'claim-failed') return 'Couldn’t collect.'
+  if (code === 'tables-failed') return 'Can’t see open tables right now.'
+  if (code === 'claims-failed') return 'Can’t look up that money right now.'
+  if (code === 'submit-failed') return 'Couldn’t check your words.'
+  if (code === 'start-failed') return 'Couldn’t start.'
+  if (code === 'daily-already-played') return 'You already played today’s board.'
+  if (code === 'not-seated') return 'You’re not in this room.'
+  if (code === 'already-consumed') return 'That run’s already in.'
+  if (code === 'wallet-mismatch' || code === 'bad-challenge' || code === 'bad-body' || code === 'bad-token' || code === 'bad-address')
+    return 'Something went wrong. Try again.'
+  if (!code || (!/\s/.test(code) && code.length < 48)) return 'Something went wrong. Try again.'
+  return code
+}
+
+function setNotice(message: string) {
+  pendingNotice = message
+  const el = root.querySelector<HTMLElement>('[data-el="notice"]')
+  if (el) el.textContent = message
+}
+
+function noticeSlot() {
+  const text = pendingNotice ?? ''
+  pendingNotice = null
+  return `<p class="kicker" data-el="notice">${escapeHtml(text)}</p>`
+}
+
 boot()
 
 async function boot() {
   root.innerHTML = `
     <div class="home-brand" style="padding-top:28vh">
       <img class="home-logo" src="/logo.jpg" alt="" />
-      <p class="wordmark">Versus Word</p>
+      <p class="wordmark">Versus Words</p>
       <p class="kicker">Getting ready…</p>
     </div>
   `
@@ -108,7 +160,7 @@ async function boot() {
     root.innerHTML = `
       <div class="home-brand" style="padding-top:28vh">
         <img class="home-logo" src="/logo.jpg" alt="" />
-        <p class="wordmark">Versus Word</p>
+        <p class="wordmark">Versus Words</p>
         <p class="kicker">Can’t reach the game right now.</p>
       </div>
     `
@@ -124,8 +176,8 @@ async function showHome() {
   root.innerHTML = `
     <div class="home">
       <div class="home-brand">
-        <img class="home-logo" src="/logo.jpg" alt="Versus Word" />
-        <h1 class="wordmark">Versus Word</h1>
+        <img class="home-logo" src="/logo.jpg" alt="Versus Words" />
+        <h1 class="wordmark">Versus Words</h1>
         <p class="kicker">Same letters. More words wins.</p>
       </div>
       <div class="game-grid">
@@ -225,7 +277,7 @@ async function showClaims() {
   } catch (err) {
     root.innerHTML = `
       ${backBtn()}
-      <p class="kicker">${escapeHtml(err instanceof Error ? err.message : 'claims-failed')}</p>
+      <p class="kicker">${escapeHtml(humanError(err instanceof Error ? err.message : 'claims-failed'))}</p>
     `
     root.querySelector('[data-act="home"]')?.addEventListener('click', goHome)
     return
@@ -234,6 +286,7 @@ async function showClaims() {
   root.innerHTML = `
     ${backBtn()}
     <h1 class="wordmark">Your money</h1>
+    ${noticeSlot()}
     <div class="stack" style="margin-top:22px">
       ${
         rows.length
@@ -270,10 +323,7 @@ async function showClaims() {
 }
 
 function humanConnectError(code: string): string {
-  if (code === 'not-in-pay') return 'Open this in Nimiq Pay, then try again.'
-  if (code === 'no-account') return 'No wallet found in Pay.'
-  if (code === 'PermissionDeniedError' || /denied|reject/i.test(code)) return 'You cancelled the sign-in.'
-  return code
+  return humanError(code)
 }
 
 async function showGameHub(game: GameKind) {
@@ -341,7 +391,7 @@ async function startRun(mode: 'free' | 'daily', game: GameKind = activeGame) {
       await showHome()
       return
     }
-    root.innerHTML = `<p class="kicker">${escapeHtml(message)}</p>${backBtn()}`
+    root.innerHTML = `<p class="kicker">${escapeHtml(humanError(message))}</p>${backBtn()}`
     root.querySelector('.back')?.addEventListener('click', () => void showHome())
     return
   }
@@ -509,7 +559,7 @@ function showPlay(run: IssuedRun) {
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'submit-failed'
-      root.innerHTML = `<p class="kicker">${escapeHtml(message)}</p><button class="btn btn-primary" data-act="home">Home</button>`
+      root.innerHTML = `<p class="kicker">${escapeHtml(humanError(message))}</p><button class="btn btn-primary" data-act="home">Home</button>`
       root.querySelector('[data-act="home"]')?.addEventListener('click', () => void showHome())
     }
   }
@@ -794,7 +844,7 @@ function showAnagramsPlay(run: IssuedRun) {
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'submit-failed'
-      root.innerHTML = `<p class="kicker">${escapeHtml(message)}</p><button class="btn btn-primary" data-act="home">Home</button>`
+      root.innerHTML = `<p class="kicker">${escapeHtml(humanError(message))}</p><button class="btn btn-primary" data-act="home">Home</button>`
       root.querySelector('[data-act="home"]')?.addEventListener('click', () => void showHome())
     }
   }
@@ -836,6 +886,7 @@ async function showNewChallenge(preset?: GameKind[]) {
       <label class="field">
         <span>Amount</span>
         <input class="amount" name="amount" inputmode="decimal" placeholder="e.g. 12.5" value="1" />
+        <p class="field-error" data-el="amount-error"></p>
       </label>
       <label class="field">
         <span>Game modes</span>
@@ -846,6 +897,7 @@ async function showNewChallenge(preset?: GameKind[]) {
       </label>
       <p class="note" data-el="hint">${escapeHtml(gameModeHint('unique'))}</p>
       <button class="btn btn-primary" type="submit">Open table</button>
+      <p class="kicker" data-el="notice"></p>
     </form>
   `
   const hint = root.querySelector<HTMLElement>('[data-el="hint"]')!
@@ -905,17 +957,34 @@ async function showNewChallenge(preset?: GameKind[]) {
     })
   })
   paint()
+  const amountInput = root.querySelector<HTMLInputElement>('input.amount')
+  const amountError = root.querySelector<HTMLElement>('[data-el="amount-error"]')
+  amountInput?.addEventListener('input', () => {
+    if (amountError) amountError.textContent = ''
+  })
   root.querySelector<HTMLFormElement>('[data-el="form"]')?.addEventListener('submit', async (event) => {
     event.preventDefault()
     const raw = new FormData(event.currentTarget as HTMLFormElement).get('amount')
     const amount = Number(String(raw ?? '').replace(',', '.'))
     const games = [...selected]
+    if (amountError) amountError.textContent = ''
+    if (!Number.isFinite(amount) || amount < 0.1 || amount > 100_000) {
+      if (amountError) amountError.textContent = humanError('bad-stake')
+      amountInput?.focus()
+      return
+    }
     try {
       const match = await api.createMatch({ stakeAmount: amount, asset, scoreMode, games, listed })
       history.replaceState({}, '', `/?v=${match.id}`)
       await showMatch(match.id)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'create-failed')
+      const code = err instanceof Error ? err.message : 'create-failed'
+      if (code === 'bad-stake' && amountError) {
+        amountError.textContent = humanError(code)
+        amountInput?.focus()
+        return
+      }
+      setNotice(humanError(code))
     }
   })
 }
@@ -927,6 +996,7 @@ async function showTables() {
     ${backBtn()}
     <h1 class="wordmark">Open tables</h1>
     <p class="kicker">Pick a stake. Sit down.</p>
+    ${noticeSlot()}
     <div class="seg" style="margin-top:18px">
       <button type="button" data-asset="all">All</button>
       <button type="button" data-asset="NIM">NIM</button>
@@ -995,7 +1065,7 @@ async function showTables() {
         })
       })
     } catch (err) {
-      listEl.innerHTML = `<p class="kicker">${escapeHtml(err instanceof Error ? err.message : 'tables-failed')}</p>`
+      listEl.innerHTML = `<p class="kicker">${escapeHtml(humanError(err instanceof Error ? err.message : 'tables-failed'))}</p>`
     }
   }
 
@@ -1025,17 +1095,12 @@ async function sitAtTable(id: string) {
     await showMatch(id)
   } catch (err) {
     const code = err instanceof Error ? err.message : 'join-failed'
-    if (code === 'seat-taken' || code === 'room-closed') {
-      alert('That seat just filled. Pick another.')
-      void showTables()
-      return
-    }
     if (code === 'self-join') {
       history.replaceState({}, '', `/?v=${id}`)
       await showMatch(id)
       return
     }
-    alert(code)
+    setNotice(humanError(code))
     void showTables()
   }
 }
@@ -1215,6 +1280,7 @@ function paintMatch(match: MatchView) {
       </ol>
     </section>
     <div class="stack" style="margin-top:16px">
+      ${noticeSlot()}
       ${youNeedWallet ? `<p class="note">Connect a wallet, then come back with this code.</p>` : ''}
       ${canJoin ? `<button class="btn btn-primary" data-act="join">I’m in</button>` : ''}
       ${canFund ? `<button class="btn btn-primary" data-act="fund">Put in ${escapeHtml(stakeLabel)}</button>` : ''}
@@ -1239,7 +1305,7 @@ function paintMatch(match: MatchView) {
       paintedMatchKey = ''
       await showMatch(id)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'join-failed')
+      setNotice(humanError(err instanceof Error ? err.message : 'join-failed'))
     }
   })
   root.querySelector('[data-act="fund"]')?.addEventListener('click', () => void fundSeat(id))
@@ -1261,7 +1327,7 @@ async function beginVersus(id: string) {
   } catch (err) {
     playLocked = false
     paintedMatchKey = ''
-    alert(err instanceof Error ? err.message : 'run-failed')
+    setNotice(humanError(err instanceof Error ? err.message : 'run-failed'))
     await showMatch(id)
   }
 }
@@ -1297,22 +1363,24 @@ async function claimUsdt(id: string, after?: () => void | Promise<void>, action:
     }
     await api.markClaimed(id, hash).catch(() => undefined)
     if (after) {
+      setNotice('On its way.')
       await after()
       return
     }
-    alert(`Claim sent: ${hash}`)
+    paintedMatchKey = ''
+    setNotice('On its way.')
+    await showMatch(id)
   } catch (err) {
-    alert(humanClaimError(err instanceof Error ? err.message : 'claim-failed'))
+    const message = humanError(err instanceof Error ? err.message : 'claim-failed')
+    if (after) {
+      setNotice(message)
+      await after()
+      return
+    }
+    paintedMatchKey = ''
+    setNotice(message)
+    await showMatch(id)
   }
-}
-
-function humanClaimError(code: string): string {
-  if (code === 'pot-missing') return 'Nothing left to collect.'
-  if (code === 'not-settled') return 'The round isn’t over yet.'
-  if (code === 'usdt-escrow-unconfigured') return 'Can’t collect right now.'
-  if (/denied|reject/i.test(code)) return 'You cancelled.'
-  if (/settled|already/i.test(code)) return 'Already collected.'
-  return code
 }
 
 async function fundSeat(id: string) {
@@ -1354,11 +1422,9 @@ async function fundSeat(id: string) {
     await api.fundMatch(id, { txHash: hash, evmAddress })
     await showMatch(id)
   } catch (err) {
-    root.innerHTML = `
-      <p class="kicker">${escapeHtml(err instanceof Error ? err.message : 'fund-failed')}</p>
-      <button class="btn btn-primary" data-act="back">Back</button>
-    `
-    root.querySelector('[data-act="back"]')?.addEventListener('click', () => void showMatch(id))
+    paintedMatchKey = ''
+    setNotice(humanError(err instanceof Error ? err.message : 'fund-failed'))
+    await showMatch(id)
   }
 }
 
@@ -1444,7 +1510,9 @@ async function offerRematch(id: string) {
     paintedMatchKey = ''
     await showMatch(id)
   } catch (err) {
-    alert(err instanceof Error ? err.message : 'rematch-failed')
+    paintedMatchKey = ''
+    setNotice(humanError(err instanceof Error ? err.message : 'rematch-failed'))
+    await showMatch(id)
   }
 }
 
@@ -1453,8 +1521,8 @@ async function acceptIncomingRematch(id: string) {
     const next = await api.acceptRematch(id)
     await goToMatch(next.id)
   } catch (err) {
-    alert(err instanceof Error ? err.message : 'accept-failed')
     paintedMatchKey = ''
+    setNotice(humanError(err instanceof Error ? err.message : 'accept-failed'))
     await showMatch(id)
   }
 }
@@ -1465,7 +1533,9 @@ async function declineIncomingRematch(id: string) {
     paintedMatchKey = ''
     await showMatch(id)
   } catch (err) {
-    alert(err instanceof Error ? err.message : 'decline-failed')
+    paintedMatchKey = ''
+    setNotice(humanError(err instanceof Error ? err.message : 'decline-failed'))
+    await showMatch(id)
   }
 }
 

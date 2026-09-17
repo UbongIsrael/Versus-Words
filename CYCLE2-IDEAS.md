@@ -2,7 +2,7 @@
 
 Decision file for a **solo, cold-start** builder whose goal is **placing**, not monetizing.
 
-**Selected: Versus Word.** Product spec: [`docs/versus-word.md`](docs/versus-word.md). Other briefs stay here as rejected alternatives.
+**Selected: Versus Words.** Product spec: [`docs/versus-word.md`](docs/versus-word.md). Other briefs stay here as rejected alternatives.
 
 Calendar used here: kickoff **24 Aug**, Sip & Ship **26 Aug / 2 Sep / 9 Sep / 16 Sep**, close **19 Sep**. That is **26 days**, with Week 3 public testing and a final week to tighten.
 
@@ -14,7 +14,7 @@ This was not “will people pay you.” It was: **can the core loop be proven on
 
 | If you only have… | Ideas you can honestly prove |
 | --- | --- |
-| One phone + a laptop | Versus Word, One Object, Café Shift, Heartbeat, Last Bid |
+| One phone + a laptop | Versus Words, One Object, Café Shift, Heartbeat, Last Bid |
 | A second phone (yours or a friend’s) | All of the above, plus Table Pay, Proof of Paid, Warranty Stub (as a demo) |
 | A real meetup or café you can visit | Door Stake, Table Pay filmed IRL, Warranty Stub as a real sale |
 | A street / performer | Busker Window |
@@ -33,7 +33,7 @@ This was a **product shape**, not “do you want to earn a living from the app.�
 
 You said winning is the goal. That means pick the shape that **scores**, not the shape that could become a company. For a solo cold start, the competitive loop is the safest path to users (every match is an invite). Ritual/place is how first place was won, but Space already owns the big version. IRL money is original and very “Nimiq Pay,” but a cold start has to manufacture the second person.
 
-**Call for this builder:** explore **competitive loop first**, **ritual/place second**, IRL only if you have a second phone and want to bet on craft. Godot is worth it only for Versus Word. Everything else should be web.
+**Call for this builder:** explore **competitive loop first**, **ritual/place second**, IRL only if you have a second phone and want to bet on craft. Godot is worth it only for Versus Words. Everything else should be web.
 
 ---
 
@@ -58,7 +58,7 @@ Each idea is scored **for you**, not in the abstract. 1 = weak for this profile,
 
 | Rank | Idea | Shape | Stack | Composite /5 | One-line verdict |
 | --- | --- | --- | --- | --- | --- |
-| 1 | **C — Versus Word** | Competitive | Godot **or** web | **4.6** | Clearest path to a trophy as a solo unknown |
+| 1 | **C — Versus Words** | Competitive | Godot **or** web | **4.6** | Clearest path to a trophy as a solo unknown |
 | 2 | **B — One Object** | Ritual / place | Web + realtime | **4.3** | Space’s lesson without competing with Space |
 | 3 | **A — Table Pay** | IRL money | Web | **4.0** | Highest payment originality; marketing is the hard part |
 | 4 | **F — Heartbeat** | Ritual | Web | **3.6** | Distinct and finishable; weaker “open it tomorrow” |
@@ -69,11 +69,11 @@ Each idea is scored **for you**, not in the abstract. 1 = weak for this profile,
 | 9 | **I — Warranty Stub** | IRL money | Web | **2.6** | Needs a merchant scene you do not have |
 | 10 | **G — Busker Window** | IRL money | Web | **2.4** | Filmable; empty map if you cannot stage a set |
 
-If you want a single default: **build Versus Word.** If that genre bores you, **One Object** is the other winner-shaped bet. Table Pay is the pick if you would rather perfect a 20-second handshake than a game.
+If you want a single default: **build Versus Words.** If that genre bores you, **One Object** is the other winner-shaped bet. Table Pay is the pick if you would rather perfect a 20-second handshake than a game.
 
 ---
 
-## C — Versus Word
+## C — Versus Words
 
 **Composite 4.6 · recommended default**
 
@@ -558,7 +558,7 @@ Anything already in Cycle I Band 0–1: splitters, ROSCAs, tip jars, invoices, s
 
 ## Decision rule
 
-1. If you want the highest expected place as a solo unknown: **Versus Word**.
+1. If you want the highest expected place as a solo unknown: **Versus Words**.
 2. If you want to make a *place* and you will inhabit it daily: **One Object**.
 3. If you have two phones and care more about a perfect handshake than entertainment: **Table Pay**.
 4. If none of those three excite you, stop and say so — do not pick Heartbeat/Café/Door as a compromise. Compromises do not win 26-day cycles.

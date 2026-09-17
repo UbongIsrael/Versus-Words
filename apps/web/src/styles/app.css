@@ -87,6 +87,11 @@ button,
   line-height: 1.4;
 }
 
+.kicker:empty {
+  display: none;
+  margin: 0;
+}
+
 .stack {
   display: grid;
   gap: 12px;
@@ -589,6 +594,17 @@ button,
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--mute);
+}
+
+.field-error {
+  margin: 0;
+  color: var(--bad);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.field-error:empty {
+  display: none;
 }
 
 .seg {
