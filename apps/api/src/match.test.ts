@@ -7,6 +7,7 @@ import {
   createMatch,
   declineRematch,
   expireMatch,
+  isOpenTable,
   joinMatch,
   keepForClaim,
   leaveMatch,
@@ -230,6 +231,19 @@ describe('versus match', () => {
     applyScore(match, BOB, ['CAT'], [])
     expect(match.settledAt).toBeDefined()
     expect(match.winner).toBe(ALICE)
+  })
+
+  it('lists an empty seat as an open table, not a private one', () => {
+    const open = createMatch(ALICE, { amount: 1, listed: true })
+    const invite = createMatch(ALICE, { amount: 2, listed: false })
+    expect(isOpenTable(open)).toBe(true)
+    expect(isOpenTable(invite)).toBe(false)
+    joinMatch(open, BOB)
+    expect(isOpenTable(open)).toBe(false)
+  })
+
+  it('defaults new rooms to listed', () => {
+    expect(createMatch(ALICE, 1).listed).toBe(true)
   })
 
   it('accepts a custom NIM amount and a short room code', () => {

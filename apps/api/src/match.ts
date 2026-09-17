@@ -31,6 +31,7 @@ export type MatchSetup = {
   scoreMode?: ScoreMode
   code?: string
   games?: GameKind[]
+  listed?: boolean
 }
 
 export type Seat = {
@@ -84,6 +85,8 @@ export type Match = {
   rematchMatchId?: string
   claimedOnChain?: boolean
   claimTx?: string
+  /** Empty seat, visible on Find a game. Invite-only rooms stay off the list. */
+  listed?: boolean
 }
 
 export type RematchOffer = {
@@ -199,6 +202,7 @@ export function createMatch(
     challenger: { address: wallet, funded: false, present: true, lastSeenAt: now },
     opponent: null,
     payouts: [],
+    listed: options.listed !== false,
   }
 }
 
@@ -212,6 +216,7 @@ export function rematchFrom(previous: Match, now = Date.now()): Match {
       scoreMode: previous.scoreMode ?? 'unique',
       code: previous.code,
       games: previous.games,
+      listed: previous.listed === true,
     },
     now,
   )
@@ -293,6 +298,14 @@ export function bothFunded(match: Match): boolean {
 
 export function bothScored(match: Match): boolean {
   return Boolean(match.challenger.words && match.opponent?.words)
+}
+
+export function isOpenTable(match: Match, now = Date.now()): boolean {
+  if (match.listed !== true) return false
+  if (match.opponent) return false
+  if (isClosed(match) || isSettled(match)) return false
+  if (now >= match.expiresAt) return false
+  return true
 }
 
 export function isSettled(match: Match): boolean {
@@ -594,6 +607,7 @@ export function publicMatch(match: Match, viewer?: string | null) {
     rematch: rematchView(match, you?.address ?? null),
     claimedOnChain: Boolean(match.claimedOnChain),
     claimTx: match.claimTx ?? null,
+    listed: match.listed === true,
   }
 }
 

@@ -22,7 +22,7 @@ const PORT = Number(process.env.PORT ?? 8787)
 const SECRET = process.env.RUN_SECRET ?? 'versus-word-dev-secret'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(HERE, '../../..')
-const DICT_PATH = resolve(HERE, process.env.DICT_PATH ?? '../../../data/enable.txt')
+const DICT_PATH = resolve(HERE, process.env.DICT_PATH || '../../../data/enable.txt')
 const DATA_DIR = process.env.DATA_DIR ? resolve(process.env.DATA_DIR) : resolve(ROOT, 'data')
 const CORS_ORIGINS = (process.env.CORS_ORIGINS ?? '')
   .split(',')

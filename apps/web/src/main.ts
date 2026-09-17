@@ -44,6 +44,7 @@ let timer: number | null = null
 let matchPoll: number | null = null
 let rematchTick: number | null = null
 let playLocked = false
+let playClearTimer: number | null = null
 let matchViewGen = 0
 let paintedMatchKey = ''
 let cachedEvm: string | null = null
@@ -58,6 +59,20 @@ const GAME_META: Record<GameKind, { title: string; blurb: string }> = {
     title: 'Anagrams',
     blurb: 'Find the most words. Win.',
   },
+}
+
+function backBtn(act = 'home', label = 'Back') {
+  return `<button class="back" type="button" data-act="${act}" aria-label="${label}">←</button>`
+}
+
+function gameModeName(mode: 'unique' | 'count') {
+  return mode === 'count' ? 'Most words' : 'Unique words'
+}
+
+function gameModeHint(mode: 'unique' | 'count') {
+  return mode === 'count'
+    ? 'Every word counts, even if they found it too. Most words wins.'
+    : 'If you both find the same word, it cancels out. Only words they missed count.'
 }
 
 boot()
@@ -111,7 +126,7 @@ async function showHome() {
       <div class="home-brand">
         <img class="home-logo" src="/logo.jpg" alt="Versus Word" />
         <h1 class="wordmark">Versus Word</h1>
-        <p class="kicker">Two games. One clock.</p>
+        <p class="kicker">Same letters. More words wins.</p>
       </div>
       <div class="game-grid">
         <button class="poster" type="button" data-game="trace">
@@ -126,8 +141,8 @@ async function showHome() {
       <div class="home-actions">
         ${
           session
-            ? `<button class="btn btn-primary" data-act="challenge">Challenge someone</button>
-               <button class="btn btn-ghost" data-act="join-code">I have a code</button>
+            ? `<button class="btn btn-primary" data-act="tables">Find a game</button>
+               <button class="btn btn-ghost" data-act="challenge">Open a table</button>
                <button class="btn btn-ghost" data-act="claims">Rewards</button>`
             : pay
               ? `<button class="btn btn-primary" data-act="connect">Connect to play</button>`
@@ -151,8 +166,8 @@ async function showHome() {
       void showGameHub(game)
     })
   })
+  root.querySelector('[data-act="tables"]')?.addEventListener('click', () => void showTables())
   root.querySelector('[data-act="challenge"]')?.addEventListener('click', () => void showNewChallenge())
-  root.querySelector('[data-act="join-code"]')?.addEventListener('click', () => showJoinCode())
   root.querySelector('[data-act="claims"]')?.addEventListener('click', () => {
     history.replaceState({}, '', '/?claims=1')
     void showClaims()
@@ -200,7 +215,7 @@ async function showClaims() {
     const evm = (await peekEvmAddress()) ?? (await resolveEvmAddress())
     if (!evm) {
       root.innerHTML = `
-        <button class="back" type="button" data-act="home">Back</button>
+        ${backBtn()}
         <p class="kicker">No wallet on this phone to collect with.</p>
       `
       root.querySelector('[data-act="home"]')?.addEventListener('click', goHome)
@@ -209,7 +224,7 @@ async function showClaims() {
     rows = (await api.claims(evm)).claims
   } catch (err) {
     root.innerHTML = `
-      <button class="back" type="button" data-act="home">Back</button>
+      ${backBtn()}
       <p class="kicker">${escapeHtml(err instanceof Error ? err.message : 'claims-failed')}</p>
     `
     root.querySelector('[data-act="home"]')?.addEventListener('click', goHome)
@@ -217,7 +232,7 @@ async function showClaims() {
   }
 
   root.innerHTML = `
-    <button class="back" type="button" data-act="home">Back</button>
+    ${backBtn()}
     <h1 class="wordmark">Your money</h1>
     <div class="stack" style="margin-top:22px">
       ${
@@ -275,22 +290,24 @@ async function showGameHub(game: GameKind) {
     return
   }
 
-  const art = game === 'anagrams' ? '/game-anagrams.jpg' : '/game-trace.jpg'
+  const art = game === 'anagrams' ? '/hub-anagrams.jpg' : '/hub-trace.jpg'
   root.innerHTML = `
     <div class="hub">
-      <button class="back" type="button" data-act="home">Back</button>
-      <div class="hub-hero">
+      ${backBtn()}
+      <div class="hub-hero ${game === 'anagrams' ? 'is-anagrams' : 'is-trace'}">
         <img src="${art}" alt="" />
         <div class="hub-hero-copy">
           <h1>${escapeHtml(meta.title)}</h1>
           <p>${escapeHtml(meta.blurb)}</p>
         </div>
       </div>
-      <button class="btn btn-primary" data-act="free">Practice</button>
-      <button class="btn btn-ghost" data-act="daily" ${daily.played ? 'disabled' : ''}>
-        ${daily.played ? `You’re done · ${daily.score} pts` : 'Today’s challenge'}
-      </button>
-      ${session ? `<button class="btn btn-ghost" data-act="challenge">Challenge someone</button>` : ''}
+      <div class="hub-plays">
+        <button class="btn btn-primary" data-act="free">Practice</button>
+        <button class="btn btn-ghost" data-act="daily" ${daily.played ? 'disabled' : ''}>
+          ${daily.played ? `You’re done · ${daily.score} pts` : 'Today’s challenge'}
+        </button>
+        ${session ? `<button class="btn btn-ghost" data-act="challenge">Open a table</button>` : ''}
+      </div>
       <section class="card">
         <div class="mode-tag">${daily.date}</div>
         ${
@@ -324,7 +341,7 @@ async function startRun(mode: 'free' | 'daily', game: GameKind = activeGame) {
       await showHome()
       return
     }
-    root.innerHTML = `<p class="kicker">${escapeHtml(message)}</p><button class="back">Back</button>`
+    root.innerHTML = `<p class="kicker">${escapeHtml(message)}</p>${backBtn()}`
     root.querySelector('.back')?.addEventListener('click', () => void showHome())
     return
   }
@@ -352,16 +369,15 @@ function showPlay(run: IssuedRun) {
   root.innerHTML = `
     <div class="play-screen" data-play="1">
       <div class="play-head">
-        <button class="back" type="button" data-act="quit">Quit</button>
-        <div class="mode-tag">${run.mode === 'daily' ? 'Today' : run.mode === 'versus' ? 'Versus' : 'Practice'}</div>
+        ${backBtn('quit', 'Quit')}
+        <div class="mode-tag">${run.mode === 'daily' ? 'Today' : run.mode === 'versus' ? 'Versus' : 'Practice'} · Trace</div>
         <div class="clock" data-el="clock">1:30</div>
       </div>
-      <div class="current" data-el="current"></div>
-      <div class="play-stage">
-        <div class="grid-wrap" data-el="grid"></div>
-        <p class="pop" data-el="pop"></p>
-      </div>
       <div class="found" data-el="found"></div>
+      <div class="play-stage">
+        <div class="spell compact" data-el="spell"></div>
+        <div class="grid-wrap" data-el="grid"></div>
+      </div>
       <div class="scoreline">
         <span data-el="tally">0 words</span>
         <span></span>
@@ -371,17 +387,39 @@ function showPlay(run: IssuedRun) {
 
   const gridEl = root.querySelector<HTMLElement>('[data-el="grid"]')!
   const clockEl = root.querySelector<HTMLElement>('[data-el="clock"]')!
-  const currentEl = root.querySelector<HTMLElement>('[data-el="current"]')!
+  const spellEl = root.querySelector<HTMLElement>('[data-el="spell"]')!
   const foundEl = root.querySelector<HTMLElement>('[data-el="found"]')!
   const tallyEl = root.querySelector<HTMLElement>('[data-el="tally"]')!
 
-  function paintStatus() {
+  function paintSpell(pts?: number) {
     const preview = wordFromPath(cells, livePath)
-    currentEl.classList.toggle('good', status === 'good')
-    currentEl.classList.toggle('bad', status === 'bad')
-    currentEl.classList.toggle('already', status === 'already')
-    if (status === 'good' || status === 'bad' || status === 'already') currentEl.textContent = statusWord
-    else currentEl.textContent = preview.ok ? preview.word : preview.error === 'empty' ? '' : '·'
+    const word = status === 'idle' ? (preview.ok ? preview.word : '') : statusWord
+    spellEl.classList.remove('good', 'bad', 'already')
+    void spellEl.offsetWidth
+    if (status !== 'idle') spellEl.classList.add(status)
+    const extra = status === 'good' && pts ? `<span class="spell-pts">+${pts}</span>` : ''
+    spellEl.innerHTML =
+      [...word]
+        .map(
+          (ch, i) =>
+            `<span class="spell-letter${status === 'idle' && i === word.length - 1 ? ' in' : ''}">${escapeHtml(ch)}</span>`,
+        )
+        .join('') + extra
+  }
+
+  function resolveWord(kind: 'good' | 'bad' | 'already', word: string, pts?: number) {
+    livePath = []
+    status = kind
+    statusWord = word
+    paintSpell(pts)
+    paintFound()
+    if (playClearTimer !== null) window.clearTimeout(playClearTimer)
+    playClearTimer = window.setTimeout(() => {
+      status = 'idle'
+      statusWord = ''
+      paintSpell()
+      playClearTimer = null
+    }, 520)
   }
 
   function paintFound() {
@@ -394,47 +432,43 @@ function showPlay(run: IssuedRun) {
 
   gridView = mountGrid(gridEl, cells, {
     onPath(path) {
+      if (playClearTimer !== null) {
+        window.clearTimeout(playClearTimer)
+        playClearTimer = null
+      }
       livePath = path
       status = 'idle'
-      paintStatus()
+      statusWord = ''
+      paintSpell()
     },
     onCommit(path) {
-      livePath = []
       const at = Date.now() - run.startTs
       const parsed = wordFromPath(cells, path)
       if (!parsed.ok) {
-        status = parsed.error === 'empty' || parsed.error === 'too-short' ? 'idle' : 'bad'
+        livePath = []
+        status = 'idle'
         statusWord = ''
-        paintStatus()
+        paintSpell()
         return
       }
       if (!hasWord(dict!, parsed.word)) {
-        status = 'bad'
-        statusWord = parsed.word
-        paintStatus()
-        flashPop('bad', parsed.word)
+        resolveWord('bad', parsed.word)
         vibrate(12)
         return
       }
       if (found.has(parsed.word)) {
-        status = 'already'
-        statusWord = 'Already in'
-        paintStatus()
-        flashPop('already', 'Already in')
+        resolveWord('already', parsed.word)
         vibrate(10)
         return
       }
       inputs.push({ t: Math.max(0, at), cells: path })
       found.add(parsed.word)
-      paintFound()
-      const pts = pointsForLength(parsed.word.length)
-      status = 'good'
-      statusWord = parsed.word
-      paintStatus()
-      flashPop('good', `+${pts}`)
+      resolveWord('good', parsed.word, pointsForLength(parsed.word.length))
       vibrate(8)
     },
   })
+  paintSpell()
+  paintFound()
 
   root.querySelector('[data-act="quit"]')?.addEventListener('click', () => {
     if (run.mode === 'daily' || run.mode === 'versus') {
@@ -599,12 +633,11 @@ function showAnagramsPlay(run: IssuedRun) {
   let status: 'idle' | 'good' | 'bad' | 'already' = 'idle'
   let locked = false
   let submitting = false
-  let clearTimer: number | null = null
 
   root.innerHTML = `
     <div class="play-screen" data-play="1">
       <div class="play-head">
-        <button class="back" type="button" data-act="quit">Quit</button>
+        ${backBtn('quit', 'Quit')}
         <div class="mode-tag">${run.mode === 'daily' ? 'Today' : run.mode === 'versus' ? 'Versus' : 'Practice'} · Anagrams</div>
         <div class="clock" data-el="clock">1:30</div>
       </div>
@@ -684,15 +717,15 @@ function showAnagramsPlay(run: IssuedRun) {
     paintRack()
     paintFound()
     sendBtn.disabled = true
-    if (clearTimer !== null) window.clearTimeout(clearTimer)
-    clearTimer = window.setTimeout(() => {
+    if (playClearTimer !== null) window.clearTimeout(playClearTimer)
+    playClearTimer = window.setTimeout(() => {
       picked.length = 0
       status = 'idle'
       locked = false
       sendBtn.disabled = false
       paintSpell()
       paintRack()
-      clearTimer = null
+      playClearTimer = null
     }, 520)
   }
 
@@ -747,7 +780,6 @@ function showAnagramsPlay(run: IssuedRun) {
   async function finish(issued: IssuedRun, log: InputEvent[]) {
     if (submitting) return
     submitting = true
-    if (clearTimer !== null) window.clearTimeout(clearTimer)
     teardownPlay()
     root.innerHTML = `<p class="kicker">Checking your words…</p>`
     try {
@@ -771,11 +803,12 @@ function showAnagramsPlay(run: IssuedRun) {
 async function showNewChallenge(preset?: GameKind[]) {
   let asset: 'NIM' | 'USDT' = 'NIM'
   let scoreMode: 'unique' | 'count' = 'unique'
+  let listed = true
   const selected = new Set<GameKind>(preset?.length ? preset : ['trace'])
   root.innerHTML = `
-    <button class="back" type="button" data-act="home">Back</button>
-    <h1 class="wordmark">New room</h1>
-    <p class="kicker">Invite someone. Winner takes the pot.</p>
+    ${backBtn()}
+    <h1 class="wordmark">New table</h1>
+    <p class="kicker">Put a stake down. Someone sits.</p>
     <form class="stack" style="margin-top:22px" data-el="form">
       <label class="field">
         <span>Games</span>
@@ -785,6 +818,14 @@ async function showNewChallenge(preset?: GameKind[]) {
         </div>
       </label>
       <p class="note" data-el="games-hint"></p>
+      <label class="field">
+        <span>Who can sit</span>
+        <div class="seg">
+          <button type="button" data-list="open">Anyone</button>
+          <button type="button" data-list="invite">Code only</button>
+        </div>
+      </label>
+      <p class="note" data-el="list-hint"></p>
       <label class="field">
         <span>Play for</span>
         <div class="seg">
@@ -797,35 +838,39 @@ async function showNewChallenge(preset?: GameKind[]) {
         <input class="amount" name="amount" inputmode="decimal" placeholder="e.g. 12.5" value="1" />
       </label>
       <label class="field">
-        <span>How you win</span>
+        <span>Game modes</span>
         <div class="seg">
-          <button type="button" class="on" data-mode="unique">Words they missed</button>
+          <button type="button" class="on" data-mode="unique">Unique words</button>
           <button type="button" data-mode="count">Most words</button>
         </div>
       </label>
-      <p class="note" data-el="hint">Only words they didn’t find count.</p>
-      <button class="btn btn-primary" type="submit">Open room</button>
+      <p class="note" data-el="hint">${escapeHtml(gameModeHint('unique'))}</p>
+      <button class="btn btn-primary" type="submit">Open table</button>
     </form>
   `
   const hint = root.querySelector<HTMLElement>('[data-el="hint"]')!
   const gamesHint = root.querySelector<HTMLElement>('[data-el="games-hint"]')!
+  const listHint = root.querySelector<HTMLElement>('[data-el="list-hint"]')!
   function paint() {
     root.querySelectorAll('[data-asset]').forEach((btn) => btn.classList.toggle('on', btn.getAttribute('data-asset') === asset))
     root.querySelectorAll('[data-mode]').forEach((btn) => btn.classList.toggle('on', btn.getAttribute('data-mode') === scoreMode))
+    root.querySelectorAll('[data-list]').forEach((btn) =>
+      btn.classList.toggle('on', (btn.getAttribute('data-list') === 'open') === listed),
+    )
     root.querySelectorAll('[data-game]').forEach((btn) => {
       const game = btn.getAttribute('data-game')
       btn.classList.toggle('on', game === 'trace' || game === 'anagrams' ? selected.has(game) : false)
     })
+    listHint.textContent = listed
+      ? 'It shows up for people looking for a game.'
+      : 'They need the code from you.'
     gamesHint.textContent =
       selected.size > 1
         ? 'You’ll play both. Scores add up.'
         : selected.has('anagrams')
           ? 'Same letters. Most words wins.'
           : 'Same grid. Draw more words than they do.'
-    hint.textContent =
-      scoreMode === 'count'
-        ? 'Whoever finds more words wins.'
-        : 'Only words they didn’t find count.'
+    hint.textContent = gameModeHint(scoreMode)
   }
   root.querySelector('[data-act="home"]')?.addEventListener('click', () => {
     history.replaceState({}, '', '/')
@@ -840,6 +885,12 @@ async function showNewChallenge(preset?: GameKind[]) {
   root.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((btn) => {
     btn.addEventListener('click', () => {
       scoreMode = btn.dataset.mode === 'count' ? 'count' : 'unique'
+      paint()
+    })
+  })
+  root.querySelectorAll<HTMLButtonElement>('[data-list]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      listed = btn.dataset.list !== 'invite'
       paint()
     })
   })
@@ -860,7 +911,7 @@ async function showNewChallenge(preset?: GameKind[]) {
     const amount = Number(String(raw ?? '').replace(',', '.'))
     const games = [...selected]
     try {
-      const match = await api.createMatch({ stakeAmount: amount, asset, scoreMode, games })
+      const match = await api.createMatch({ stakeAmount: amount, asset, scoreMode, games, listed })
       history.replaceState({}, '', `/?v=${match.id}`)
       await showMatch(match.id)
     } catch (err) {
@@ -869,9 +920,129 @@ async function showNewChallenge(preset?: GameKind[]) {
   })
 }
 
+async function showTables() {
+  teardownPlay()
+  let asset: 'NIM' | 'USDT' | 'all' = 'all'
+  root.innerHTML = `
+    ${backBtn()}
+    <h1 class="wordmark">Open tables</h1>
+    <p class="kicker">Pick a stake. Sit down.</p>
+    <div class="seg" style="margin-top:18px">
+      <button type="button" data-asset="all">All</button>
+      <button type="button" data-asset="NIM">NIM</button>
+      <button type="button" data-asset="USDT">USDT</button>
+    </div>
+    <div class="stack" style="margin-top:16px" data-el="list">
+      <p class="kicker">Looking…</p>
+    </div>
+    <div class="home-actions" style="margin-top:18px">
+      <button class="btn btn-ghost" data-act="join-code">I have a code</button>
+      <button class="btn btn-primary" data-act="challenge">Open a table</button>
+    </div>
+  `
+  const listEl = root.querySelector<HTMLElement>('[data-el="list"]')!
+  const goHome = () => {
+    stopMatchPoll()
+    void showHome()
+  }
+  root.querySelector('[data-act="home"]')?.addEventListener('click', goHome)
+  root.querySelector('[data-act="join-code"]')?.addEventListener('click', () => {
+    stopMatchPoll()
+    showJoinCode()
+  })
+  root.querySelector('[data-act="challenge"]')?.addEventListener('click', () => {
+    stopMatchPoll()
+    void showNewChallenge()
+  })
+
+  function paintFilter() {
+    root.querySelectorAll('[data-asset]').forEach((btn) =>
+      btn.classList.toggle('on', btn.getAttribute('data-asset') === asset),
+    )
+  }
+
+  async function refresh() {
+    paintFilter()
+    try {
+      const { tables } = await api.tables()
+      const rows = tables.filter((row) => asset === 'all' || row.asset === asset)
+      if (!rows.length) {
+        listEl.innerHTML = `<section class="card"><p class="kicker">${
+          asset === 'all' ? 'Nobody’s waiting. Open a table.' : `No ${asset} tables up.`
+        }</p></section>`
+        return
+      }
+      listEl.innerHTML = rows
+        .map(
+          (row, i) => `
+        <button class="table-row" type="button" data-id="${escapeHtml(row.id)}" style="--tilt:${i % 2 === 0 ? '-1.4' : '1.5'}deg">
+          <div class="table-stake">${escapeHtml(formatAmount(row.stakeAmount))} ${escapeHtml(row.asset)}</div>
+          <div class="table-meta">${escapeHtml(row.games.map((g) => GAME_META[g].title).join(' + '))} · ${
+            gameModeName(row.scoreMode)
+          }</div>
+          <div class="table-host">${escapeHtml(row.host)}</div>
+        </button>`,
+        )
+        .join('')
+      listEl.querySelectorAll<HTMLButtonElement>('[data-id]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.id
+          if (!id) return
+          btn.disabled = true
+          void sitAtTable(id).finally(() => {
+            btn.disabled = false
+          })
+        })
+      })
+    } catch (err) {
+      listEl.innerHTML = `<p class="kicker">${escapeHtml(err instanceof Error ? err.message : 'tables-failed')}</p>`
+    }
+  }
+
+  root.querySelectorAll<HTMLButtonElement>('[data-asset]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const next = btn.dataset.asset
+      asset = next === 'USDT' || next === 'NIM' ? next : 'all'
+      void refresh()
+    })
+  })
+
+  await refresh()
+  const tick = async () => {
+    if (!root.querySelector('[data-el="list"]')) return
+    await refresh()
+    matchPoll = window.setTimeout(() => void tick(), 2500)
+  }
+  stopMatchPoll()
+  matchPoll = window.setTimeout(() => void tick(), 2500)
+}
+
+async function sitAtTable(id: string) {
+  stopMatchPoll()
+  try {
+    await api.joinMatch(id)
+    history.replaceState({}, '', `/?v=${id}`)
+    await showMatch(id)
+  } catch (err) {
+    const code = err instanceof Error ? err.message : 'join-failed'
+    if (code === 'seat-taken' || code === 'room-closed') {
+      alert('That seat just filled. Pick another.')
+      void showTables()
+      return
+    }
+    if (code === 'self-join') {
+      history.replaceState({}, '', `/?v=${id}`)
+      await showMatch(id)
+      return
+    }
+    alert(code)
+    void showTables()
+  }
+}
+
 function showJoinCode() {
   root.innerHTML = `
-    <button class="back" type="button" data-act="home">Back</button>
+    ${backBtn()}
     <h1 class="wordmark">Join</h1>
     <p class="kicker">Got a code?</p>
     <form class="stack" style="margin-top:22px" data-el="form">
@@ -1023,9 +1194,7 @@ function paintMatch(match: MatchView) {
   const games = match.games?.length ? match.games : (['trace'] as GameKind[])
   const game = match.game ?? games[match.round ?? 0] ?? 'trace'
   const round = match.round ?? 0
-  const modeLabel = `${games.map((g) => GAME_META[g].title).join(' + ')} · ${
-    match.scoreMode === 'count' ? 'Most words' : 'Words they missed'
-  }`
+  const modeLabel = `${games.map((g) => GAME_META[g].title).join(' + ')} · ${gameModeName(match.scoreMode)}`
   const playLabel =
     games.length > 1
       ? `${GAME_META[game].title} · round ${round + 1} of ${games.length}`
@@ -1033,17 +1202,13 @@ function paintMatch(match: MatchView) {
 
   root.innerHTML = `
     <div class="play-head" data-match-id="${escapeHtml(match.id)}">
-      <button class="back" type="button" data-act="home">Home</button>
+      ${backBtn('home', 'Home')}
       <div class="mode-tag">${escapeHtml(stakeLabel)} · ${modeLabel}</div>
     </div>
     <section class="card">
       <div class="mode-tag">Code</div>
       <p class="room-code">${escapeHtml(match.code)}</p>
-      <p class="kicker" style="margin-top:8px">${
-        match.scoreMode === 'count'
-          ? 'Whoever finds more words wins.'
-          : 'Only words they didn’t find count.'
-      }</p>
+      <p class="kicker" style="margin-top:8px">${escapeHtml(gameModeHint(match.scoreMode))}</p>
       <ol class="board-list" style="margin-top:14px">
         <li><span>${escapeHtml(shortAddr(match.challenger.address))} · host</span><span class="muted">${seatState(match.challenger, match.scoreMode)}</span></li>
         <li><span>${match.opponent ? escapeHtml(shortAddr(match.opponent.address)) : 'Waiting…'}</span><span class="muted">${match.opponent ? seatState(match.opponent, match.scoreMode) : 'open'}</span></li>
@@ -1391,6 +1556,10 @@ function clearPlaySurface() {
     window.clearTimeout(timer)
     timer = null
   }
+  if (playClearTimer !== null) {
+    window.clearTimeout(playClearTimer)
+    playClearTimer = null
+  }
   gridView?.destroy()
   gridView = null
 }
@@ -1401,18 +1570,6 @@ function teardownPlay() {
   clearPlaySurface()
   stopMatchPoll()
   stopRematchTick()
-}
-
-function flashPop(kind: 'good' | 'bad' | 'already', text: string) {
-  const el = root.querySelector<HTMLElement>('[data-el="pop"]')
-  if (!el) return
-  el.className = `pop ${kind} show`
-  el.textContent = text
-  window.clearTimeout(Number(el.dataset.timer ?? 0))
-  const timerId = window.setTimeout(() => {
-    el.classList.remove('show')
-  }, 700)
-  el.dataset.timer = String(timerId)
 }
 
 function vibrate(ms: number) {

@@ -107,6 +107,16 @@ export type AppConfig = {
   }
 }
 
+export type TableRow = {
+  id: string
+  games: GameKind[]
+  asset: 'NIM' | 'USDT'
+  stakeAmount: number
+  scoreMode: 'unique' | 'count'
+  host: string
+  createdAt: number
+}
+
 export type ClaimRow = {
   matchId: string
   amount: number
@@ -171,11 +181,13 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ token: run.token, inputs }) },
     ),
   config: () => req<AppConfig>('/api/config'),
+  tables: () => req<{ tables: TableRow[] }>('/api/tables'),
   createMatch: (body: {
     stakeAmount: number
     asset: 'NIM' | 'USDT'
     scoreMode: 'unique' | 'count'
     games: GameKind[]
+    listed?: boolean
   }) => req<MatchView>('/api/matches', { method: 'POST', body: JSON.stringify(body) }),
   getMatch: (id: string, evm?: string) =>
     req<MatchView>(`/api/matches/${id}${evm ? `?evm=${encodeURIComponent(evm)}` : ''}`),

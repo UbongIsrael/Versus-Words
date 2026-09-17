@@ -13,8 +13,10 @@ import {
   markSeatFunded,
   isClosed,
   isSettled,
+  isOpenTable,
   joinMatch,
   leaveMatch,
+  matchGames,
   publicMatch,
   payoutFor,
   requestRematch,
@@ -30,7 +32,7 @@ import { isGuestId, normalizeWalletAddress } from './nimiq.ts'
 import { createMatchStore } from './persist.ts'
 import type { Store } from './store.ts'
 import { oracleAddress, playerDeposited, readPot, listOpenPotsForPlayer, KNOWN_ESCROW_POTS, signSettle, winnerCode, USDT_ESCROW, USDT_TOKEN, POLYGON_CHAIN_ID, usdtEscrowConfigured } from './polygon.ts'
-import { newId, roundSeedHex, signRun } from './token.ts'
+import { maskPlayer, newId, roundSeedHex, signRun } from './token.ts'
 
 type PlayerFn = (c: { req: { header: (n: string) => string | undefined; query: (n: string) => string | undefined } }) =>
   | string
@@ -204,6 +206,27 @@ export async function attachMatchRoutes(
     return c.json(publicMatch(match, wallet))
   })
 
+  app.get('/api/tables', (c) => {
+    const wallet = walletOf(c)
+    const now = Date.now()
+    for (const match of matches.values()) sweepMatch(match, now)
+    persist()
+    const tables = [...matches.values()]
+      .filter((match) => isOpenTable(match, now) && match.challenger.address !== wallet)
+      .sort((a, b) => a.stakeAmount - b.stakeAmount || b.createdAt - a.createdAt)
+      .slice(0, 40)
+      .map((match) => ({
+        id: match.id,
+        games: matchGames(match),
+        asset: match.asset ?? 'NIM',
+        stakeAmount: match.stakeAmount,
+        scoreMode: match.scoreMode ?? 'unique',
+        host: maskPlayer(match.challenger.address),
+        createdAt: match.createdAt,
+      }))
+    return c.json({ tables })
+  })
+
   app.get('/api/transparency', (c) =>
     c.json({
       escrowAddress: escrowConfigured() ? ESCROW_ADDRESS : null,
@@ -222,12 +245,14 @@ export async function attachMatchRoutes(
       const taken = (code: string) => [...matches.values()].some((m) => m.code === code && !m.settledAt)
       let code = typeof body.code === 'string' ? normalizeRoomCode(body.code) : null
       if (code && taken(code)) throw new Error('code-taken')
+      const listed = body.listed !== false
       let match = createMatch(wallet, {
         amount: Number(body.stakeAmount ?? body.stakeNim),
         asset: body.asset === 'USDT' ? 'USDT' : 'NIM',
         scoreMode: body.scoreMode === 'count' ? 'count' : 'unique',
         code: code ?? undefined,
         games: parseGames(body.games),
+        listed,
       })
       for (let i = 0; i < 8 && taken(match.code); i++) {
         match = createMatch(wallet, {
@@ -235,6 +260,7 @@ export async function attachMatchRoutes(
           asset: body.asset === 'USDT' ? 'USDT' : 'NIM',
           scoreMode: body.scoreMode === 'count' ? 'count' : 'unique',
           games: parseGames(body.games),
+          listed,
         })
       }
       if (taken(match.code)) throw new Error('code-taken')
