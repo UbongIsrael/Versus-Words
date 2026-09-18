@@ -1,6 +1,7 @@
 {
   "name": "@versus/contracts",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "test": "hardhat test",
     "compile": "hardhat compile"

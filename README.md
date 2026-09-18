@@ -34,3 +34,7 @@ Production (split hosts):
 Play in a phone-sized viewport. In Nimiq Pay: Custom URL → your live HTTPS host.
 
 `npm run dev` uses `FAKE_CHAIN=1`. Live NIM pots go through Nimiq Pay (`sendBasicTransactionWithData`). Live USDT pots: deploy [`contracts/src/VersusEscrow.sol`](contracts/src/VersusEscrow.sol), set `USDT_ESCROW` + `POLYGON_ORACLE_KEY`. The client never writes a score. Contract tests: `npm test --prefix contracts`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
