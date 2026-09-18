@@ -9,3 +9,8 @@ data/matches.json
 contracts/cache
 contracts/artifacts
 contracts/typechain-types
+
+# Internal notes — not part of the public product
+AGENTS.md
+CYCLE2-IDEAS.md
+docs/versus-word.md

@@ -6,7 +6,7 @@ Versus Words is a leisure word game for friends — and anyone who sits at an op
 
 You can play for fun: practice any time, or take today’s board. You can also put NIM or USDT on the line. You both get the same letters. When the clock runs out, whoever found more takes the pot. In unique-words, a word you both found counts for nobody. In most-words, every word counts. Invite a friend with a code, or open a table and let a stranger sit.
 
-A [Nimiq Pay](https://nimiq.dev/mini-apps) Mini App for Cycle II. Spec: [docs/versus-word.md](docs/versus-word.md).
+A [Nimiq Pay](https://nimiq.dev/mini-apps) Mini App. Game rules: [docs/game-mechanics.md](docs/game-mechanics.md).
 
 ## Run
 
@@ -33,6 +33,4 @@ Production (split hosts):
 
 Play in a phone-sized viewport. In Nimiq Pay: Custom URL → your live HTTPS host.
 
-`npm run dev` uses `FAKE_CHAIN=1`. Live USDT pots: deploy [`contracts/src/VersusEscrow.sol`](contracts/src/VersusEscrow.sol), set `USDT_ESCROW` + `POLYGON_ORACLE_KEY`. Contract tests: `npm test --prefix contracts`.
-
-Game rules: [docs/game-mechanics.md](docs/game-mechanics.md).
+`npm run dev` uses `FAKE_CHAIN=1`. Live NIM pots go through Nimiq Pay (`sendBasicTransactionWithData`). Live USDT pots: deploy [`contracts/src/VersusEscrow.sol`](contracts/src/VersusEscrow.sol), set `USDT_ESCROW` + `POLYGON_ORACLE_KEY`. The client never writes a score. Contract tests: `npm test --prefix contracts`.
