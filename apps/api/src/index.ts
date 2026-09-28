@@ -60,6 +60,9 @@ app.use(
 )
 
 let matchStoreKind = 'pending'
+app.get('/', (c) =>
+  c.json({ ok: true, service: 'versus-words-api', health: '/health' }),
+)
 app.get('/health', (c) =>
   c.json({ ok: true, words: dict.size, date: utcDate(), matches: matchStoreKind }),
 )
@@ -257,8 +260,8 @@ app.post('/api/runs/:id/submit', async (c) => {
   })
 })
 
-serve({ fetch: app.fetch, port: PORT }, (info) => {
-  console.log(`versus-word api on http://localhost:${info.port} (${dict.size} words, ${matchStoreKind})`)
+serve({ fetch: app.fetch, port: PORT, hostname: '0.0.0.0' }, (info) => {
+  console.log(`versus-word api on http://0.0.0.0:${info.port} (${dict.size} words, ${matchStoreKind})`)
 })
 
 async function flushAndExit() {
