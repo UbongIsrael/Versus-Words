@@ -56,14 +56,19 @@ function gcsMatchStore(bucket: string, object = 'matches.json'): MatchStore {
   return {
     kind: `gcs:${bucket}/${object}`,
     async load() {
-      const token = await gcpAccessToken()
+      // Railway has no GCP metadata server available, so GCS-backed storage
+      // only works if a token is explicitly provided via GOOGLE_ACCESS_TOKEN.
+      // Without one, skip GCS entirely instead of crashing at startup.
+      const token = gcpAccessToken()
+      if (!token) return []
       const res = await fetch(mediaUrl, { headers: { Authorization: `Bearer ${token}` } })
       if (res.status === 404) return []
       if (!res.ok) throw new Error(`gcs load ${res.status} ${await res.text()}`)
       return parseMatches(await res.text())
     },
     async save(matches) {
-      const token = await gcpAccessToken()
+      const token = gcpAccessToken()
+      if (!token) return
       const res = await fetch(uploadUrl, {
         method: 'POST',
         headers: {
@@ -77,20 +82,12 @@ function gcsMatchStore(bucket: string, object = 'matches.json'): MatchStore {
   }
 }
 
-let cachedToken: { value: string; exp: number } | null = null
-
-async function gcpAccessToken(): Promise<string> {
+// Previously this fetched a token from the GCP metadata server
+// (http://metadata.google.internal/...). That server is only reachable when
+// running on Google Cloud infrastructure, and calling it on Railway caused
+// the API to crash at startup. GCS-backed storage now only works if a token
+// is explicitly supplied via the GOOGLE_ACCESS_TOKEN environment variable.
+function gcpAccessToken(): string | null {
   const fromEnv = (process.env.GOOGLE_ACCESS_TOKEN ?? '').trim()
-  if (fromEnv) return fromEnv
-  if (cachedToken && Date.now() < cachedToken.exp) return cachedToken.value
-  const res = await fetch(
-    'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
-    { headers: { 'Metadata-Flavor': 'Google' }, signal: AbortSignal.timeout(3000) },
-  )
-  if (!res.ok) throw new Error(`gcp metadata token ${res.status}`)
-  const body = (await res.json()) as { access_token?: string; expires_in?: number }
-  if (!body.access_token) throw new Error('gcp metadata token missing')
-  const ttlMs = Math.max(30, (body.expires_in ?? 3600) - 60) * 1000
-  cachedToken = { value: body.access_token, exp: Date.now() + ttlMs }
-  return cachedToken.value
+  return fromEnv || null
 }
