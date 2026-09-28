@@ -28,7 +28,7 @@ Production (split hosts):
 - **Frontend (Vercel):** `VITE_API_URL=https://your-api.example.com` (build-time)
 - **API (Cloud Run / Railway):** deploy from the **repo root**, not `apps/api`. `@versus/sim` is a local workspace, not an npm package.
   - Cloud Run: use the root `Dockerfile`. `PORT` is set by the platform (defaults to 8080 there).
-  - Env: `CORS_ORIGINS=https://your-frontend.vercel.app`, `RUN_SECRET`, plus chain keys as needed.
+  - Env: `CORS_ORIGINS=https://your-frontend.example.com`, `RUN_SECRET`, plus chain keys as needed. Railway API: `https://apvw.up.railway.app` (`/health` is the live check; `/` is not a page).
   - Rooms live in memory plus `matches.json`. That file dies with the container on a Cloud Run rebuild. Set `MATCH_BUCKET` to a GCS bucket (same project, service account `roles/storage.objectAdmin`) so rooms come back after deploy. Keep `--max-instances=1`. `/health` reports `matches: gcs:bucket/matches.json` when it is on.
 
 Play in a phone-sized viewport. In Nimiq Pay: Custom URL → your live HTTPS host.
